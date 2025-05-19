@@ -1,157 +1,191 @@
 import re
 from typing import List
 
-import nlpcloud
 from sklearn.cluster import KMeans
 from sklearn.feature_extraction.text import TfidfVectorizer
 from sumy.summarizers.lsa import LsaSummarizer
 
-client = nlpcloud.Client("bart-large-cnn", "ac937ad1e1b3dd41198339e389cb48eee4a16bd4")
+import re
+from pptx.util import Inches, Pt
+import re
+import os
+import json
+import PyPDF2
+from pdfminer.high_level import extract_text as pdfminer_extract_text
+from pdfminer.layout import LAParams
+from pptx import Presentation
+from pptx.util import Inches, Pt
+from pptx.enum.text import PP_ALIGN
+import ollama  # Importando a biblioteca Ollama
 
-import nltk
-from nltk.tokenize import word_tokenize
-from nltk.corpus import names, stopwords
-from nltk.stem import WordNetLemmatizer
 
-nltk.download('punkt')
-nltk.download('names')
-nltk.download('stopwords')
-nltk.download('wordnet')
+class OllamaProcessor:
+    """Classe para processar texto usando modelos do Ollama"""
 
-class TextManager:
-    def __init__(self, text: str):
-        self.text = text
-        self.summarizer = LsaSummarizer()
-        self.known_names = set(names.words())
+    def __init__(self, model_name="llama3"):
+        """
+        Inicializa o processador Ollama
 
-    def cluster_sentences(sentences, num_clusters=3):
-        vectorizer = TfidfVectorizer()
-        X = vectorizer.fit_transform(sentences)
+        Args:
+            model_name (str): Nome do modelo Ollama a ser usado
+        """
+        self.model_name = model_name
 
-        kmeans = KMeans(n_clusters=num_clusters, random_state=42)
-        clusters = kmeans.fit_predict(X)
+    def clean_and_structure_text(self, text):
+        """
+        Usa o Ollama para limpar e estruturar texto mal formatado
 
-        clustered_sentences = {i: [] for i in range(num_clusters)}
-        for i, label in enumerate(clusters):
-            clustered_sentences[label].append(sentences[i])
+        Args:
+            text (str): Texto extraído do PDF
 
-        return clustered_sentences
+        Returns:
+            str: Texto limpo e estruturado
+        """
+        prompt = f"""
+        Por favor, limpe e estruture o seguinte texto extraído de um PDF. 
+        O texto está mal formatado com quebras de linha incorretas e espaços extras.
 
-    def extract_sentences(self, text: str) -> List[str]:
-        """Extracts and cleans meaningful sentences from text."""
-        sentences = nltk.sent_tokenize(text)  # Melhor segmentação de frases
+        TEXTO:
+        {text}
 
-        cleaned_sentences = []
-        for sentence in sentences:
-            # Remove caracteres especiais, mantendo letras e espaços
-            cleaned_sentence = re.sub(r'[^a-zA-Z\s]', '', sentence)
-            cleaned_sentence = ' '.join(cleaned_sentence.split())  # Remove espaços extras
+        Por favor retorne o texto limpo e bem formatado, mantendo a estrutura de seções e parágrafos.
+        """
 
-            # Ignorar frases que são apenas números ou que têm menos de 2 palavras
-            if cleaned_sentence and not cleaned_sentence.isdigit() and len(cleaned_sentence.split()) > 1:
-                cleaned_sentences.append(cleaned_sentence)
+        try:
+            response = ollama.chat(model=self.model_name, messages=[
+                {'role': 'user', 'content': prompt}
+            ])
+            cleaned_text = response['message']['content']
+            return cleaned_text
+        except Exception as e:
+            print(f"Erro ao usar Ollama para limpar texto: {e}")
+            # Retorna o texto original se houver erro
+            return text
 
-        return cleaned_sentences
+    def analyze_document_structure(self, text):
+        """
+        Usa o Ollama para analisar a estrutura do documento e retornar metadados e seções
 
-    def preprocess_text(self, text: str) -> str:
-        # 1. Remoção de caracteres especiais e pontuação
-        text = re.sub(r'[^\w\s]', '', text)
+        Args:
+            text (str): Texto do documento
 
-        # 2. Conversão para minúsculas
-        text = text.lower()
+        Returns:
+            dict: Estrutura com metadados e seções do documento
+        """
+        prompt = f"""
+        Analise este documento e extraia sua estrutura. Identifique título, subtítulo, versão, data e as seções.
+        Para cada seção, identifique título e pontos principais.
 
-        # 3. Remoção de stopwords
-        stop_words = set(stopwords.words('english'))
-        tokens = word_tokenize(text)
-        tokens = [word for word in tokens if word not in stop_words]
+        DOCUMENTO:
+        {text[:8000]}  # Limitando para evitar tokens muito longos
 
-        # 4. Lematização
-        lemmatizer = WordNetLemmatizer()
-        tokens = [lemmatizer.lemmatize(word) for word in tokens]
+        Retorne o resultado como um objeto JSON com a seguinte estrutura:
+        {{
+            "title": "Título do documento",
+            "subtitle": "Subtítulo se existir",
+            "version": "Versão se mencionada",
+            "date": "Data se mencionada",
+            "sections": [
+                {{
+                    "title": "Nome da Seção 1",
+                    "content": ["Ponto 1", "Ponto 2", "..."]
+                }},
+                {{
+                    "title": "Nome da Seção 2",
+                    "content": ["Ponto 1", "Ponto 2", "..."]
+                }}
+            ]
+        }}
 
-        # Juntar os tokens de volta em um texto
-        preprocessed_text = ' '.join(tokens)
+        Não inclua explicações extras, apenas o JSON.
+        """
 
-        return preprocessed_text
+        try:
+            response = ollama.chat(model=self.model_name, messages=[
+                {'role': 'user', 'content': prompt}
+            ])
 
-    def summarize_text(self, text: str) -> str:
-        summary_dict = client.summarization(text)
-        return summary_dict.get('summary_text', '')
+            # Verifica se a resposta está vazia
+            if not response or 'message' not in response or not response['message'].get('content'):
+                raise ValueError("Resposta da API Ollama está vazia ou inválida.")
 
-    def extract_document_title(self) -> str:
-        """Extract the title from the document text."""
+            result = response['message']['content']
 
-        lines = self.text.strip().split("\n")  # Divide o texto em linhas e remove espaços extras
+            # Extrair o JSON da resposta (pode estar envolto em ```json ```)
+            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', result)
+            if json_match:
+                result = json_match.group(1)
 
-        # 1. Procurar por um título explícito com palavras-chave
-        title_patterns = [
-            r'(?i)^\s*(?:title|document title|report|heading|subject)[:\-]?\s*(.+)$'  # "Title: My Document"
-        ]
+            # Limpar qualquer texto antes ou depois do JSON
+            result = re.sub(r'^[^{]*', '', result)  # Remove texto antes do {
+            result = re.sub(r'[^}]*$', '', result)  # Remove texto depois do }
 
-        for line in lines[:10]:  # Verifica apenas as primeiras 10 linhas
-            for pattern in title_patterns:
-                match = re.match(pattern, line.strip())
-                if match:
-                    return match.group(1).strip()
+            # Parse do JSON
+            structure = json.loads(result)
+            return structure
+        except json.JSONDecodeError as e:
+            print(f"Erro ao decodificar JSON: {e}")
+            print(f"Resposta recebida: {response['message']['content']}")
+            return {
+                "title": "Documento Extraído",
+                "subtitle": "",
+                "version": "",
+                "date": "",
+                "sections": []
+            }
+        except Exception as e:
+            print(f"Erro ao analisar estrutura com Ollama: {e}")
+            return {
+                "title": "Documento Extraído",
+                "subtitle": "",
+                "version": "",
+                "date": "",
+                "sections": []
+            }
 
-        # 2. Se não encontrou um título explícito, assume a primeira linha não vazia como título
-        for line in lines:
-            cleaned_line = line.strip()
-            if cleaned_line and not re.match(r'^\d+$', cleaned_line):  # Ignora números isolados (ex: números de página)
-                return cleaned_line
+    def generate_slide_content(self, section_text, section_title):
+        """
+        Usa o Ollama para gerar conteúdo de slide a partir do texto de uma seção
 
-        return "Unknown Title"  # Se nada for encontrado
+        Args:
+            section_text (str): Texto da seção
+            section_title (str): Título da seção
 
-    def extract_document_subtitle(self) -> str:
-        """Extract the subtitle from the document text."""
+        Returns:
+            list: Lista de pontos para o slide
+        """
+        prompt = f"""
+        Crie conteúdo para um slide de PowerPoint com base no seguinte texto da seção "{section_title}".
+        Extraia 3-5 pontos principais que sejam claros e concisos.
 
-        lines = self.text.strip().split("\n")  # Divide o texto em linhas e remove espaços extras
+        TEXTO DA SEÇÃO:
+        {section_text}
 
-        # Filtra as linhas removendo espaços e ignorando linhas vazias
-        meaningful_lines = [line.strip() for line in lines if line.strip()]
+        Retorne apenas os pontos, um por linha, sem numeração ou marcadores.
+        """
 
-        # 1. Procurar por um subtítulo explícito com palavras-chave
-        subtitle_patterns = [
-            r'(?i)^\s*(?:subtitle|abstract|summary|overview|description)[:\-]?\s*(.+)$'  # "Subtitle: My Subtitle"
-        ]
+        try:
+            response = ollama.chat(model=self.model_name, messages=[
+                {'role': 'user', 'content': prompt}
+            ])
 
-        for line in meaningful_lines[:10]:  # Verifica apenas as primeiras 10 linhas
-            for pattern in subtitle_patterns:
-                match = re.match(pattern, line.strip())
-                if match:
-                    return match.group(1).strip()
+            content = response['message']['content']
 
-        # 2. Se não encontrar um subtítulo explícito, assume a segunda linha significativa como subtítulo
-        return meaningful_lines[1] if len(meaningful_lines) > 1 else "Unknown Subtitle"
+            # Divide o conteúdo em linhas e limpa
+            points = [line.strip() for line in content.split('\n') if line.strip()]
 
-    def extract_author(self) -> str:
-        """Extract the author from the document text, considering both individuals and companies."""
+            # Remove marcadores ou números se existirem
+            cleaned_points = []
+            for point in points:
+                # Remove marcadores comuns e números
+                point = re.sub(r'^[\*\-•\d]+[\.\)]\s*', '', point)
+                if point:
+                    cleaned_points.append(point)
 
-        lines = self.text.strip().split("\n")[:10]  # Verifica as primeiras 10 linhas do documento
-
-        # 1. Padrões comuns para identificar autores
-        author_patterns = [
-            r'(?i)^\s*(?:author|autor|by|written by|company|organization|produced by)[:\-]?\s*(.+)$',
-            r'(?i)^(.{3,50})$'  # Linha curta pode ser um nome ou empresa
-        ]
-
-        for line in lines:
-            for pattern in author_patterns:
-                match = re.match(pattern, line.strip())
-                if match:
-                    return match.group(1).strip()
-
-        # 2. Se não encontrou explicitamente, tenta identificar um nome próprio ou empresa
-        for line in lines:
-            words = word_tokenize(line)
-            potential_names = [word for word in words if word.istitle() and word in self.known_names]
-
-            # Se encontrar um nome próprio, retorna
-            if potential_names:
-                return " ".join(potential_names)
-
-            # Se a linha contém siglas ou parece ser o nome de uma empresa
-            if re.match(r'^[A-Z][A-Za-z0-9&\s]+(?:Ltd|Inc|Corp|LLC|SA|GmbH|Co|Group|Technologies|Systems)?$', line):
-                return line.strip()
-
-        return "Unknown Author"  # Se nada for encontrado
+            return cleaned_points
+        except Exception as e:
+            print(f"Erro ao gerar conteúdo de slide com Ollama: {e}")
+            # Se houver erro, divide o texto em frases
+            sentences = re.split(r'[.!?]+', section_text)
+            # Seleciona até 5 frases não vazias
+            return [s.strip() for s in sentences if len(s.strip()) > 20][:5]
