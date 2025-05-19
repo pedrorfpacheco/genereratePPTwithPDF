@@ -1,8 +1,25 @@
 import os
+from flask import Flask, render_template, request, send_file, jsonify
+from werkzeug.utils import secure_filename
 
+# Importar a função principal do código existente
 from manageData import OllamaProcessor
 from ppt_generator import PdfToPptxConverter
 from readPDF import PdfExtractor
+
+app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # Limitar uploads a 16MB
+app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
+
+# Criar a pasta de uploads se não existir
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+
+def allowed_file(filename):
+    """Verifica se a extensão do arquivo é permitida"""
+    return '.' in filename and \
+        filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 
 def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, model_name="llama3"):
@@ -83,77 +100,85 @@ def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="ll
             os.remove(temp_pdf_path)
 
 
-# Exemplo de uso:
-if __name__ == "__main__":
-    # Exemplo 1: A partir de um arquivo PDF
-    # pdf_to_pptx_with_ollama("documento_procedural.pdf", model_name="llama3")
+@app.route('/')
+def index():
+    """Renderiza a página inicial"""
+    return render_template('index.html')
 
-    # Exemplo 2: A partir de texto já extraído
 
-    sample_text = """Bosch Rexroth Canada Corp. reserves the right to revise t his information at any time and for 
-any reason and reserves the right to make changes at a ny time, without notice or obligation, 
-to any of the information contained in this piece of  literature. 
-Please check for updates at: www.boschrexroth.ca/compu -spread 
+@app.route('/convert', methods=['POST'])
+def convert_pdf():
+    """Processa o arquivo PDF enviado pelo usuário"""
+    # Verificar se o arquivo foi enviado
+    if 'pdf_file' not in request.files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
 
-3/16 
-Bosch Rexroth Canada ı 11.25.2014 ı Revision 4.0  
-1     System Components 
-4/16 
-Bosch Rexroth Canada ı 11.25.2014 ı Revision 4.0  
-2     Spreader System Layout 
-See Appendix See Appendix See Appendix See Appendix    (CS (CS (CS (CS-- --550 System Layout Drawing) 550 System Layout Drawing) 550 System Layout Drawing) 550 System Layout Drawing). . ..    
-3     Joystick System Layout  
-See Appen See Appen See Appen See Appendix dix dix dix    (CS550 (CS550 (CS550 (CS550-- --150RC System Layout Drawing) 150RC System Layout Drawing) 150RC System Layout Drawing) 150RC System Layout Drawing). . ..    
-The following is a detailed navigation chart for the system layout. See Appendix for 
-the detailed system layout including all the compone nts and part numbers.   
-CS-550 / 150 ELECTRONIC SYSTEM BUILDER 
-TABLE OF CONTENTS 
-COORDINATES 
-ITEM DESCRIPTION X.Y DETA ILS 
-550 SPREADER 
-1 SPREADER PACKAGES E1 DISPLAY AND RC INCLUDED 
-2 MAIN HARNESS D7 ADVANCED OR LITE 
-3 CANBUS CABLES C2 
-4 SENSOR EXTENSIONS B6 
-5 SENSOR NETWORK C6 PULL-UP RESISTOR (WHITE MOTOR) 
-6 VEHICLE SPEED B7 
-7 VALVE EX TENSIONS E6 IF RC LOCATED IN CAB 
-8 550 AUX ILIARY CABLE E3 MATERIAL DETECT / CHANGE 
-9 VALVE ADAPTER E6 (C4M TO ITT) FOR OLD SCB/MP18 
-150 ARMREST 
-1 RCE CABLES A3 IN-VALVE OR IN-CAB 
-2 POWER FLOAT C4 NO ADAPTERS FOR NEW C4 BLOCK 
-3 150 AUXILIARY B2 
-4 CANBUS CABLE C2 
-5 LOW OIL, SPIN. REV. C3 ADAPTERS REQUIRED 
-SPECIAL FUNCTIONS 
-1 PRESSURE/TEMP/CHUTE D3 HYDRAULIC MONITORING 
-2 ROAD TEMP D0 ROAD AND AMBIENT TEMP 
-3 WIFI D2 NEED EX TENSION? 
-4 GPS PUCK E0 
-5 ANTI-ICE E4 USE C4-C4 EXTENSIONS (CUT END) 
-TOW PLOW 
-1 TP SPREADER PKG E1 INCLUDES TWO 4-4's 
-2 MAIN HARNESS D9 
-3 CANBUS SPLITTER D6 
-4 SENSOR EXTENSIONS B6 RC ON TRUCK OR TRAILER? 
-5 SENSOR NETWORK C6 IF PULL-UP RESISTORS REQUIRED 
-6 VALVE EX TENSIONS E6 RC ON TRUCK OR TRAILER? 
-5/16 
-Bosch Rexroth Canada ı 11.25.2014 ı Revision 4.0  
-4     Mounting  
-4.1    Microcontroller 
-1.  The microcontrollers(s) can be mounted horizontal o r with the connectors 
-oriented to the bottom. The controller cannot be mo unted with the connectors 
-facing upwards. 
-2.  The mounting surface must be flat and all four brack et holes used. 
-3.  Sufficient space must be allowed for the mating and un-mating of the 
-connectors. 
-4.  If the controller is mounted in the cab, valve exte nsion cables are required to be 
-routed into the valve enclosure. 
-5.  If the controller is mounted in the valve enclosure , the main harness leads will 
-terminate directly to the valve solenoid. 
-6.  The mount hole spacing is 188mm (7.4") by 59mm (2.32 "). 
-7.  See the "Installation Notes" for additional recomme ndations (page 15)."""
+    file = request.files['pdf_file']
 
-    pdf_to_pptx_with_ollama(pdf_text=sample_text, output_file="bosch_rexroth_system.pptx", model_name="llama3.2:1b")
+    # Verificar se o nome do arquivo é vazio
+    if file.filename == '':
+        return jsonify({'error': 'Nenhum arquivo selecionado'}), 400
+
+    # Verificar se o arquivo é um PDF
+    if file and allowed_file(file.filename):
+        # Obter o modelo selecionado
+        model_name = request.form.get('model', 'llama3')
+
+        # Salvar o arquivo temporariamente
+        filename = secure_filename(file.filename)
+        file_path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        file.save(file_path)
+
+        # Processar o arquivo
+        try:
+            # Ler o arquivo como bytes
+            with open(file_path, 'rb') as f:
+                pdf_bytes = f.read()
+
+            # Nome para o arquivo de saída (mantendo o nome original)
+            output_filename = os.path.splitext(filename)[0] + '.pptx'
+            output_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
+
+            # Converter o PDF para PPTX
+            pdf_bytes_to_pptx(pdf_bytes, output_file=output_path, model_name=model_name)
+
+            # Retornar o arquivo para download
+            return send_file(output_path,
+                             as_attachment=True,
+                             download_name=output_filename,
+                             mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
+
+        except Exception as e:
+            # Em caso de erro, limpar arquivos temporários
+            if os.path.exists(file_path):
+                os.remove(file_path)
+            if os.path.exists(output_path):
+                try:
+                    os.remove(output_path)
+                except PermissionError:
+                    pass  # Ignorar erro se arquivo estiver em uso
+            return jsonify({'error': f'Erro ao processar o arquivo: {str(e)}'}), 500
+
+        finally:
+            # Limpar apenas o arquivo PDF temporário
+            # O arquivo PPTX será mantido para download e removido posteriormente
+            if os.path.exists(file_path):
+                os.remove(file_path)
+
+    else:
+        return jsonify({'error': 'Tipo de arquivo não permitido. Por favor, envie um PDF.'}), 400
+
+
+@app.route('/models')
+def get_models():
+    """Retorna a lista de modelos disponíveis para o usuário escolher"""
+    # Lista de modelos Ollama - ajuste conforme necessário
+    models = [
+        {"id": "llama3.2:1b", "name": "Llama 3.2 (1B)"},
+        {"id": "deepseek-r1:14b", "name": "DeepSeek R1 (14B)"},
+    ]
+    return jsonify(models)
+
+
+if __name__ == '__main__':
+    app.run(debug=True, host='0.0.0.0', port=5000)

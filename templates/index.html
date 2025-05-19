@@ -1,0 +1,477 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF to PowerPoint converter</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --primary-color: #0066cc;
+            --secondary-color: #004080;
+            --success-color: #28a745;
+            --danger-color: #dc3545;
+            --light-bg: #f8f9fa;
+            --dark-bg: #343a40;
+            --box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--light-bg);
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px 0;
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: var(--box-shadow);
+        }
+
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+        }
+
+        .description {
+            color: #666;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .upload-container {
+            background-color: white;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: var(--box-shadow);
+            margin-bottom: 30px;
+        }
+
+        .file-upload {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .file-upload-zone {
+            width: 100%;
+            min-height: 200px;
+            border: 2px dashed #ccc;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .file-upload-zone:hover, .file-upload-zone.dragover {
+            border-color: var(--primary-color);
+            background-color: rgba(0, 102, 204, 0.05);
+        }
+
+        .file-icon {
+            font-size: 48px;
+            color: var(--primary-color);
+            margin-bottom: 15px;
+        }
+
+        .file-upload-text {
+            text-align: center;
+        }
+
+        .file-upload-text p {
+            margin: 5px 0;
+        }
+
+        .file-input {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            top: 0;
+            left: 0;
+            opacity: 0;
+            cursor: pointer;
+        }
+
+        .selected-file {
+            display: none;
+            background-color: #e9f5ff;
+            padding: 10px 15px;
+            border-radius: 5px;
+            margin-top: 15px;
+            width: 100%;
+        }
+
+        .selected-file.active {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .file-name {
+            margin-right: 10px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+            max-width: 80%;
+        }
+
+        .remove-file {
+            background-color: transparent;
+            border: none;
+            color: var(--danger-color);
+            cursor: pointer;
+            font-size: 16px;
+        }
+
+        .model-selector {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .model-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .model-select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            background-color: white;
+        }
+
+        .convert-button {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 12px 24px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+            width: 100%;
+            font-weight: 500;
+        }
+
+        .convert-button:hover {
+            background-color: var(--secondary-color);
+        }
+
+        .convert-button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+
+        .loading {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 30px;
+        }
+
+        .loading.active {
+            display: flex;
+        }
+
+        .spinner {
+            border: 4px solid rgba(0, 0, 0, 0.1);
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border-left-color: var(--primary-color);
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error-message {
+            display: none;
+            background-color: #fff5f5;
+            border-left: 4px solid var(--danger-color);
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 5px;
+            color: #721c24;
+        }
+
+        .error-message.active {
+            display: block;
+        }
+
+        footer {
+            text-align: center;
+            margin-top: 30px;
+            color: #666;
+            font-size: 14px;
+        }
+
+        /* Responsividade */
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+
+            .upload-container {
+                padding: 20px;
+            }
+
+            .file-upload-zone {
+                min-height: 150px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>PDF to PowerPoint converter</h1>
+            <p class="description">Automatically transform your PDF documents into PowerPoint presentations</p>
+        </header>
+
+        <div class="upload-container">
+            <form id="upload-form" enctype="multipart/form-data">
+                <div class="file-upload">
+                    <div class="file-upload-zone" id="drop-zone">
+                        <i class="fas fa-file-pdf file-icon"></i>
+                        <div class="file-upload-text">
+                            <p><strong>Drag and drop</strong> your PDF file here</p>
+                            <p>or <strong>click</strong> to select</p>
+                            <p><small>Max size: 16MB</small></p>
+                        </div>
+                        <input type="file" id="file-input" class="file-input" name="pdf_file" accept=".pdf">
+                    </div>
+
+                    <div class="selected-file" id="selected-file">
+                        <span class="file-name" id="file-name"></span>
+                        <button type="button" class="remove-file" id="remove-file">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="model-selector">
+                    <label for="model-select" class="model-label">AI Model:</label>
+                    <select id="model-select" name="model" class="model-select">
+                    </select>
+                </div>
+
+                <button type="submit" id="convert-button" class="convert-button" disabled>
+                    Convert to PowerPoint
+                </button>
+            </form>
+
+            <div class="loading" id="loading">
+                <div class="spinner"></div>
+                <p>Processing your document...</p>
+                <p><small>This may take a few minutes depending on the size of the file</small></p>
+            </div>
+
+            <div class="error-message" id="error-message"></div>
+        </div>
+
+        <footer>
+            <p>PDF to PowerPoint &copy; 2025 - Developed by Pedro Pacheco</p>
+        </footer>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Elementos do DOM
+            const fileInput = document.getElementById('file-input');
+            const dropZone = document.getElementById('drop-zone');
+            const selectedFile = document.getElementById('selected-file');
+            const fileName = document.getElementById('file-name');
+            const removeFile = document.getElementById('remove-file');
+            const convertButton = document.getElementById('convert-button');
+            const uploadForm = document.getElementById('upload-form');
+            const loading = document.getElementById('loading');
+            const errorMessage = document.getElementById('error-message');
+            const modelSelect = document.getElementById('model-select');
+
+            // Carregar modelos disponíveis
+            fetch('/models')
+                .then(response => response.json())
+                .then(models => {
+                    models.forEach(model => {
+                        const option = document.createElement('option');
+                        option.value = model.id;
+                        option.textContent = model.name;
+                        modelSelect.appendChild(option);
+                    });
+                })
+                .catch(error => {
+                    console.error('Error loading templates:', error);
+                });
+
+            // Lidar com drag and drop
+            ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, preventDefaults, false);
+            });
+
+            function preventDefaults(e) {
+                e.preventDefault();
+                e.stopPropagation();
+            }
+
+            ['dragenter', 'dragover'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.add('dragover');
+                }, false);
+            });
+
+            ['dragleave', 'drop'].forEach(eventName => {
+                dropZone.addEventListener(eventName, () => {
+                    dropZone.classList.remove('dragover');
+                }, false);
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                const dt = e.dataTransfer;
+                const files = dt.files;
+
+                if (files.length) {
+                    fileInput.files = files;
+                    handleFileSelect();
+                }
+            }, false);
+
+            // Selecionar arquivo com clique
+            fileInput.addEventListener('change', handleFileSelect);
+
+            function handleFileSelect() {
+                errorMessage.classList.remove('active');
+                errorMessage.textContent = '';
+
+                if (fileInput.files.length) {
+                    const file = fileInput.files[0];
+
+                    // Verificar se é um PDF
+                    if (file.type !== "application/pdf") {
+                        showError("Please select a valid PDF file.");
+                        resetFileInput();
+                        return;
+                    }
+
+                    // Verificar tamanho (máximo 16MB)
+                    if (file.size > 16 * 1024 * 1024) {
+                        showError("The file is too big. The maximum size is 16MB.");
+                        resetFileInput();
+                        return;
+                    }
+
+                    fileName.textContent = file.name;
+                    selectedFile.classList.add('active');
+                    convertButton.disabled = false;
+                }
+            }
+
+            // Remover arquivo selecionado
+            removeFile.addEventListener('click', () => {
+                resetFileInput();
+                errorMessage.classList.remove('active');
+                errorMessage.textContent = '';
+            });
+
+            function resetFileInput() {
+                fileInput.value = '';
+                selectedFile.classList.remove('active');
+                fileName.textContent = '';
+                convertButton.disabled = true;
+            }
+
+            // Processar o envio do formulário
+            uploadForm.addEventListener('submit', (e) => {
+                e.preventDefault();
+
+                errorMessage.classList.remove('active');
+                errorMessage.textContent = '';
+
+                if (!fileInput.files.length) {
+                    showError("Please select a PDF file to convert.");
+                    return;
+                }
+
+                const formData = new FormData(uploadForm);
+
+                // Mostrar loading
+                loading.classList.add('active');
+                convertButton.disabled = true;
+
+                fetch('/convert', {
+                    method: 'POST',
+                    body: formData
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        return response.json().then(data => {
+                            throw new Error(data.error || "Error processing the file.");
+                        });
+                    }
+                    return response.blob();
+                })
+                .then(blob => {
+                    // Criar download automático
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+
+                    // Obter nome do arquivo original para o download
+                    const originalName = fileInput.files[0].name;
+                    const pptxName = originalName.replace(/\.pdf$/i, '.pptx');
+
+                    a.href = url;
+                    a.download = pptxName;
+                    document.body.appendChild(a);
+                    a.click();
+                    window.URL.revokeObjectURL(url);
+                    document.body.removeChild(a);
+
+                    resetFileInput();
+                    loading.classList.remove('active');
+                })
+                .catch(error => {
+                    console.error('Erro:', error);
+                    showError(error.message || "There was an error processing your request.");
+                    loading.classList.remove('active');
+                    convertButton.disabled = false;
+                });
+            });
+
+            function showError(message) {
+                errorMessage.textContent = message;
+                errorMessage.classList.add('active');
+            }
+        });
+    </script>
+</body>
+</html>
