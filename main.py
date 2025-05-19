@@ -1,13 +1,4 @@
-import re
 import os
-import json
-import PyPDF2
-from pdfminer.high_level import extract_text as pdfminer_extract_text
-from pdfminer.layout import LAParams
-from pptx import Presentation
-from pptx.util import Inches, Pt
-from pptx.enum.text import PP_ALIGN
-import ollama  # Importando a biblioteca Ollama
 
 from manageData import OllamaProcessor
 from ppt_generator import PdfToPptxConverter

@@ -1,19 +1,8 @@
-import pypdf
-from pptx import Presentation
-from pptx.enum.text import PP_ALIGN
-from pptx.util import Pt
-
-
 import re
-import os
-import json
-import PyPDF2
-from pdfminer.high_level import extract_text as pdfminer_extract_text
-from pdfminer.layout import LAParams
+
 from pptx import Presentation
 from pptx.util import Inches, Pt
-from pptx.enum.text import PP_ALIGN
-import ollama  # Importando a biblioteca Ollama
+
 
 class PdfToPptxConverter:
     def __init__(self, output_filename="presentation.pptx", ollama_processor=None):
@@ -232,4 +221,3 @@ class PdfToPptxConverter:
         # Salvar a apresentação
         self.prs.save(self.output_filename)
         print(f"Apresentação criada e salva como {self.output_filename}")
-
