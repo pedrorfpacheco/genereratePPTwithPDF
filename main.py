@@ -1,5 +1,8 @@
 import os
-from flask import Flask, render_template, request, send_file, jsonify
+import time
+import threading
+
+from flask import Flask, render_template, request, send_file, jsonify, after_this_request
 from werkzeug.utils import secure_filename
 
 # Importar a função principal do código existente
@@ -143,11 +146,25 @@ def convert_pdf():
             pdf_bytes_to_pptx(pdf_bytes, output_file=output_path, model_name=model_name)
 
             # Retornar o arquivo para download
-            return send_file(output_path,
-                             as_attachment=True,
-                             download_name=output_filename,
-                             mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
+            response = send_file(output_path,
+                                 as_attachment=True,
+                                 download_name=output_filename,
+                                 mimetype='application/vnd.openxmlformats-officedocument.presentationml.presentation')
 
+            # Agendar a exclusão do arquivo após um curto período
+            def delayed_file_removal(filepath, delay=3):
+                time.sleep(delay)  # Esperar alguns segundos
+                try:
+                    if os.path.exists(filepath):
+                        os.remove(filepath)
+                        print(f"Arquivo removido com sucesso: {filepath}")
+                except Exception as e:
+                    print(f"Erro ao remover arquivo: {str(e)}")
+
+            # Iniciar a thread para remover o arquivo
+            threading.Thread(target=delayed_file_removal, args=(output_path,)).start()
+
+            return response
         except Exception as e:
             # Em caso de erro, limpar arquivos temporários
             if os.path.exists(file_path):
