@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -256,7 +256,6 @@
             font-size: 14px;
         }
 
-        /* Responsividade */
         @media (max-width: 768px) {
             .container {
                 padding: 10px;
@@ -307,11 +306,11 @@
                 </div>
 
                 <div class="theme-selector">
-                    <label for="theme-select" class="theme-label">Estilo de Apresentação:</label>
+                    <label for="theme-select" class="theme-label">Presentation Style:</label>
                     <select id="theme-select" name="theme" class="theme-select">
-                        <option value="default">Padrão</option>
-                        <option value="corporate">Corporativo</option>
-                        <option value="minimal">Minimalista</option>
+                        <option value="default">Default</option>
+                        <option value="corporate">Corporate</option>
+                        <option value="minimal">Minimal</option>
                     </select>
                 </div>
 
@@ -336,7 +335,6 @@
 
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            // Elementos do DOM
             const fileInput = document.getElementById('file-input');
             const dropZone = document.getElementById('drop-zone');
             const selectedFile = document.getElementById('selected-file');
@@ -348,7 +346,6 @@
             const errorMessage = document.getElementById('error-message');
             const modelSelect = document.getElementById('model-select');
 
-            // Carregar modelos disponíveis
             fetch('/models')
                 .then(response => response.json())
                 .then(models => {
@@ -360,10 +357,9 @@
                     });
                 })
                 .catch(error => {
-                    console.error('Error loading templates:', error);
+                    console.error('Error loading models:', error);
                 });
 
-            // Lidar com drag and drop
             ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
                 dropZone.addEventListener(eventName, preventDefaults, false);
             });
@@ -395,7 +391,6 @@
                 }
             }, false);
 
-            // Selecionar arquivo com clique
             fileInput.addEventListener('change', handleFileSelect);
 
             function handleFileSelect() {
@@ -405,16 +400,14 @@
                 if (fileInput.files.length) {
                     const file = fileInput.files[0];
 
-                    // Verificar se é um PDF
                     if (file.type !== "application/pdf") {
                         showError("Please select a valid PDF file.");
                         resetFileInput();
                         return;
                     }
 
-                    // Verificar tamanho (máximo 16MB)
                     if (file.size > 16 * 1024 * 1024) {
-                        showError("The file is too big. The maximum size is 16MB.");
+                        showError("The file is too large. Maximum size is 16MB.");
                         resetFileInput();
                         return;
                     }
@@ -425,7 +418,6 @@
                 }
             }
 
-            // Remover arquivo selecionado
             removeFile.addEventListener('click', () => {
                 resetFileInput();
                 errorMessage.classList.remove('active');
@@ -439,7 +431,6 @@
                 convertButton.disabled = true;
             }
 
-            // Processar o envio do formulário
             uploadForm.addEventListener('submit', (e) => {
                 e.preventDefault();
 
@@ -453,7 +444,6 @@
 
                 const formData = new FormData(uploadForm);
 
-                // Mostrar loading
                 loading.classList.add('active');
                 convertButton.disabled = true;
 
@@ -462,36 +452,32 @@
                     body: formData
                 })
                 .then(response => {
-                    // Verificar o tipo de conteúdo da resposta
                     const contentType = response.headers.get('content-type');
 
                     if (!response.ok) {
                         if (contentType && contentType.includes('application/json')) {
                             return response.json().then(data => {
-                                throw new Error(data.error || "Erro ao processar o arquivo.");
+                                throw new Error(data.error || "Error processing the file.");
                             });
                         } else {
                             return response.text().then(text => {
-                                throw new Error("Erro no servidor: " + text);
+                                throw new Error("Server error: " + text);
                             });
                         }
                     }
 
-                    // Se o tipo de conteúdo não for aplicação/octet-stream, é um erro
                     if (!contentType || !contentType.includes('application/vnd.openxmlformats-officedocument')) {
                         return response.text().then(text => {
-                            throw new Error("O servidor retornou um formato inesperado. Por favor, tente novamente.");
+                            throw new Error("The server returned an unexpected format. Please try again.");
                         });
                     }
 
                     return response.blob();
                 })
                     .then(blob => {
-                    // Criar download automático
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
 
-                    // Obter nome do arquivo original para o download
                     const originalName = fileInput.files[0].name;
                     const pptxName = originalName.replace(/\.pdf$/i, '.pptx');
 
@@ -506,7 +492,7 @@
                     loading.classList.remove('active');
                 })
                 .catch(error => {
-                    console.error('Erro:', error);
+                    console.error('Error:', error);
                     showError(error.message || "There was an error processing your request.");
                     loading.classList.remove('active');
                     convertButton.disabled = false;

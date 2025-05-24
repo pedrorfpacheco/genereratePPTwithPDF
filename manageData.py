@@ -4,36 +4,38 @@ import ollama
 
 
 class OllamaProcessor:
-    """Classe para processar texto usando modelos do Ollama"""
+    """Class for processing text using Ollama models"""
 
     def __init__(self, model_name="llama3"):
-        """
-        Inicializa o processador Ollama
-
-        Args:
-            model_name (str): Nome do modelo Ollama a ser usado
-        """
         self.model_name = model_name
 
     def clean_and_structure_text(self, text):
         """
-        Usa o Ollama para limpar e estruturar texto mal formatado
+        Uses Ollama to clean and structure poorly formatted text.
 
         Args:
-            text (str): Texto extraído do PDF
+            text (str): Text extracted from the PDF.
 
         Returns:
-            str: Texto limpo e estruturado
+            str: Cleaned and structured text.
         """
         prompt = f"""
-        Por favor, limpe e estruture o seguinte texto extraído de um PDF. 
-        O texto está mal formatado com quebras de linha incorretas e espaços extras.
+                Please clean and structure the following raw text extracted from a **procedural document** (e.g., a manual, guide, or technical specification).
+                The text may contain OCR artifacts, incorrect line breaks, extra spaces, and mixed formatting.
 
-        TEXTO:
-        {text}
+                Your primary goal is to make the text highly readable and usable for further processing, while **strictly preserving all procedural formatting elements**:
+                - **Numbered lists** (e.g., 1., 2., 3.)
+                - **Bullet points** (e.g., -, *, •)
+                - **Headings and subheadings** (e.g., "1. Introduction", "2.1 Setup")
+                - **Important notes, warnings, or tips** (if identifiable).
 
-        Por favor retorne o texto limpo e bem formatado, mantendo a estrutura de seções e parágrafos.
-        """
+                Remove any unnecessary whitespace, merge broken lines logically, and fix common OCR errors if obvious.
+
+                TEXT:
+                {text}
+
+                Return ONLY the cleaned and well-formatted text. Do not add any conversational filler or explanations.
+                """
 
         try:
             response = ollama.chat(model=self.model_name, messages=[
@@ -42,46 +44,36 @@ class OllamaProcessor:
             cleaned_text = response['message']['content']
             return cleaned_text
         except Exception as e:
-            print(f"Erro ao usar Ollama para limpar texto: {e}")
-            # Retorna o texto original se houver erro
+            print(f"Error using Ollama to clean text: {e}")
             return text
 
     def analyze_document_structure(self, text):
-        """
-        Usa o Ollama para analisar a estrutura do documento e retornar metadados e seções
-
-        Args:
-            text (str): Texto do documento
-
-        Returns:
-            dict: Estrutura com metadados e seções do documento
-        """
         prompt = f"""
-        Analise este documento e extraia sua estrutura. Identifique título, subtítulo, versão, data e as seções.
-        Para cada seção, identifique título e pontos principais.
+        Analyze this document and extract its structure. Identify the title, subtitle, version, date, and sections.
+        For each section, identify its title and main points.
 
-        DOCUMENTO:
-        {text[:8000]}  # Limitando para evitar tokens muito longos
+        DOCUMENT:
+        {text[:8000]}
 
-        Retorne o resultado como um objeto JSON com a seguinte estrutura:
+        Return the result as a JSON object with the following structure:
         {{
-            "title": "Título do documento",
-            "subtitle": "Subtítulo se existir",
-            "version": "Versão se mencionada",
-            "date": "Data se mencionada",
+            "title": "Document Title",
+            "subtitle": "Subtitle if it exists",
+            "version": "Version if mentioned",
+            "date": "Date if mentioned",
             "sections": [
                 {{
-                    "title": "Nome da Seção 1",
-                    "content": ["Ponto 1", "Ponto 2", "..."]
+                    "title": "Section Name 1",
+                    "content": ["Point 1", "Point 2", "..."]
                 }},
                 {{
-                    "title": "Nome da Seção 2",
-                    "content": ["Ponto 1", "Ponto 2", "..."]
+                    "title": "Section Name 2", 
+                    "content": ["Point 1", "Point 2", "..."]
                 }}
             ]
         }}
 
-        Não inclua explicações extras, apenas o JSON.
+        Use valid JSON format with no trailing commas. Do not include extra explanations, only the JSON.
         """
 
         try:
@@ -89,63 +81,79 @@ class OllamaProcessor:
                 {'role': 'user', 'content': prompt}
             ])
 
-            # Verifica se a resposta está vazia
             if not response or 'message' not in response or not response['message'].get('content'):
-                raise ValueError("Resposta da API Ollama está vazia ou inválida.")
+                raise ValueError("Ollama API response is empty or invalid.")
 
             result = response['message']['content']
 
-            # Extrair o JSON da resposta (pode estar envolto em ```json ```)
             json_match = re.search(r'```json\s*([\s\S]*?)\s*```', result)
             if json_match:
                 result = json_match.group(1)
 
-            # Limpar qualquer texto antes ou depois do JSON
-            result = re.sub(r'^[^{]*', '', result)  # Remove texto antes do {
-            result = re.sub(r'[^}]*$', '', result)  # Remove texto depois do }
+            result = re.sub(r'^[^{]*', '', result)
+            result = re.sub(r'[^}]*$', '', result)
 
-            # Parse do JSON
-            structure = json.loads(result)
-            return structure
-        except json.JSONDecodeError as e:
-            print(f"Erro ao decodificar JSON: {e}")
-            print(f"Resposta recebida: {response['message']['content']}")
-            return {
-                "title": "Documento Extraído",
-                "subtitle": "",
-                "version": "",
-                "date": "",
-                "sections": []
-            }
+            result = re.sub(r',\s*}', '}', result)
+            result = re.sub(r',\s*]', ']', result)
+
+            try:
+                import json
+                structure = json.loads(result)
+                return structure
+            except json.JSONDecodeError as e:
+                print(f"Error decoding JSON: {e}")
+                print(f"Received response: {result}")
+
+                try:
+                    import json5
+                    structure = json5.loads(result)
+                    return structure
+                except:
+                    return {
+                        "title": "Extracted Document",
+                        "subtitle": "",
+                        "version": "",
+                        "date": "",
+                        "sections": [{
+                            "title": "General Information",
+                            "content": ["The document could not be properly parsed."]
+                        }]
+                    }
         except Exception as e:
-            print(f"Erro ao analisar estrutura com Ollama: {e}")
+            print(f"Error analyzing structure with Ollama: {e}")
+            print(
+                f"Received response: {response['message']['content'] if 'response' in locals() and response and 'message' in response else 'No response'}")
+
             return {
-                "title": "Documento Extraído",
+                "title": "Extracted Document",
                 "subtitle": "",
                 "version": "",
                 "date": "",
-                "sections": []
+                "sections": [{
+                    "title": "General Information",
+                    "content": ["The document could not be properly parsed."]
+                }]
             }
 
     def generate_slide_content(self, section_text, section_title):
         """
-        Usa o Ollama para gerar conteúdo de slide a partir do texto de uma seção
+        Uses Ollama to generate slide content from a section's text.
 
         Args:
-            section_text (str): Texto da seção
-            section_title (str): Título da seção
+            section_text (str): Text of the section.
+            section_title (str): Title of the section.
 
         Returns:
-            list: Lista de pontos para o slide
+            list: List of bullet points for the slide.
         """
         prompt = f"""
-        Crie conteúdo para um slide de PowerPoint com base no seguinte texto da seção "{section_title}".
-        Extraia 3-5 pontos principais que sejam claros e concisos.
+        Create content for a PowerPoint slide based on the following text from the section "{section_title}".
+        Extract 3-5 main points that are clear and concise.
 
-        TEXTO DA SEÇÃO:
+        SECTION TEXT:
         {section_text}
 
-        Retorne apenas os pontos, um por linha, sem numeração ou marcadores.
+        Return only the points, one per line, without numbering or bullet points.
         """
 
         try:
@@ -155,21 +163,16 @@ class OllamaProcessor:
 
             content = response['message']['content']
 
-            # Divide o conteúdo em linhas e limpa
             points = [line.strip() for line in content.split('\n') if line.strip()]
 
-            # Remove marcadores ou números se existirem
             cleaned_points = []
             for point in points:
-                # Remove marcadores comuns e números
                 point = re.sub(r'^[\*\-•\d]+[\.\)]\s*', '', point)
                 if point:
                     cleaned_points.append(point)
 
             return cleaned_points
         except Exception as e:
-            print(f"Erro ao gerar conteúdo de slide com Ollama: {e}")
-            # Se houver erro, divide o texto em frases
+            print(f"Error generating slide content with Ollama: {e}")
             sentences = re.split(r'[.!?]+', section_text)
-            # Seleciona até 5 frases não vazias
             return [s.strip() for s in sentences if len(s.strip()) > 20][:5]
