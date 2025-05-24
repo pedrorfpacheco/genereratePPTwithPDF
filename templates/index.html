@@ -225,6 +225,26 @@
             color: #721c24;
         }
 
+        .theme-selector {
+            width: 100%;
+            margin-bottom: 20px;
+        }
+
+        .theme-label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .theme-select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            font-size: 16px;
+            background-color: white;
+        }
+
         .error-message.active {
             display: block;
         }
@@ -283,6 +303,15 @@
                 <div class="model-selector">
                     <label for="model-select" class="model-label">AI Model:</label>
                     <select id="model-select" name="model" class="model-select">
+                    </select>
+                </div>
+
+                <div class="theme-selector">
+                    <label for="theme-select" class="theme-label">Estilo de Apresentação:</label>
+                    <select id="theme-select" name="theme" class="theme-select">
+                        <option value="default">Padrão</option>
+                        <option value="corporate">Corporativo</option>
+                        <option value="minimal">Minimalista</option>
                     </select>
                 </div>
 
@@ -433,14 +462,31 @@
                     body: formData
                 })
                 .then(response => {
+                    // Verificar o tipo de conteúdo da resposta
+                    const contentType = response.headers.get('content-type');
+
                     if (!response.ok) {
-                        return response.json().then(data => {
-                            throw new Error(data.error || "Error processing the file.");
+                        if (contentType && contentType.includes('application/json')) {
+                            return response.json().then(data => {
+                                throw new Error(data.error || "Erro ao processar o arquivo.");
+                            });
+                        } else {
+                            return response.text().then(text => {
+                                throw new Error("Erro no servidor: " + text);
+                            });
+                        }
+                    }
+
+                    // Se o tipo de conteúdo não for aplicação/octet-stream, é um erro
+                    if (!contentType || !contentType.includes('application/vnd.openxmlformats-officedocument')) {
+                        return response.text().then(text => {
+                            throw new Error("O servidor retornou um formato inesperado. Por favor, tente novamente.");
                         });
                     }
+
                     return response.blob();
                 })
-                .then(blob => {
+                    .then(blob => {
                     // Criar download automático
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');

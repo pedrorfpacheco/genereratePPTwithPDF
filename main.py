@@ -25,7 +25,7 @@ def allowed_file(filename):
         filename.rsplit('.', 1)[1].lower() in app.config['ALLOWED_EXTENSIONS']
 
 
-def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, model_name="llama3"):
+def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, model_name="llama3", theme="default"):
     """
     Converte um arquivo PDF em uma apresentação PowerPoint usando Ollama para processamento
 
@@ -34,6 +34,7 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
         pdf_text (str, optional): Texto já extraído do PDF
         output_file (str, optional): Nome do arquivo de saída
         model_name (str): Nome do modelo Ollama a ser usado
+        theme (str): Tema da apresentação
 
     Returns:
         str: Caminho para o arquivo de saída
@@ -68,15 +69,51 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
     print("Analisando a estrutura do documento com Ollama...")
     document_structure = ollama_processor.analyze_document_structure(cleaned_text)
 
+    # Verificar se document_structure é um dicionário
+    if isinstance(document_structure, str):
+        # Se for uma string, tentar convertê-la em uma estrutura de documento
+        try:
+            import json
+            document_structure = json.loads(document_structure)
+        except json.JSONDecodeError:
+            # Se não for JSON, criar uma estrutura básica
+            document_structure = {
+                "title": "Documento",
+                "subtitle": "",
+                "sections": []
+            }
+
+            # Dividir o documento em seções simples
+            lines = document_structure.split('\n')
+            current_section = None
+
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+
+                if line.startswith('#'):
+                    # É um título
+                    if not document_structure["title"]:
+                        document_structure["title"] = line.lstrip('#').strip()
+                    else:
+                        # É uma seção
+                        current_section = {
+                            "title": line.lstrip('#').strip(),
+                            "content": []
+                        }
+                        document_structure["sections"].append(current_section)
+                elif current_section:
+                    current_section["content"].append(line)
+
     # Criar e salvar a apresentação
-    print("Gerando apresentação PowerPoint...")
-    converter = PdfToPptxConverter(output_file, ollama_processor)
+    print(f"Gerando apresentação PowerPoint com tema {theme}...")
+    converter = PdfToPptxConverter(output_file, ollama_processor, theme=theme)
     converter.create_presentation(document_structure)
 
     return output_file
 
-
-def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="llama3"):
+def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="llama3", theme="default"):
     """
     Converte bytes de um PDF em uma apresentação PowerPoint
 
@@ -84,6 +121,7 @@ def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="ll
         pdf_bytes (bytes): Conteúdo do PDF em bytes
         output_file (str): Nome do arquivo de saída
         model_name (str): Nome do modelo Ollama a ser usado
+        theme (str): Tema da apresentação
 
     Returns:
         str: Caminho para o arquivo de saída
@@ -95,7 +133,8 @@ def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="ll
 
     try:
         # Processar o PDF
-        result = pdf_to_pptx_with_ollama(pdf_path=temp_pdf_path, output_file=output_file, model_name=model_name)
+        result = pdf_to_pptx_with_ollama(pdf_path=temp_pdf_path, output_file=output_file,
+                                         model_name=model_name, theme=theme)
         return result
     finally:
         # Limpar o arquivo temporário
@@ -124,8 +163,9 @@ def convert_pdf():
 
     # Verificar se o arquivo é um PDF
     if file and allowed_file(file.filename):
-        # Obter o modelo selecionado
+        # Obter o modelo e o tema selecionados
         model_name = request.form.get('model', 'llama3')
+        theme = request.form.get('theme', 'default')
 
         # Salvar o arquivo temporariamente
         filename = secure_filename(file.filename)
@@ -142,8 +182,8 @@ def convert_pdf():
             output_filename = os.path.splitext(filename)[0] + '.pptx'
             output_path = os.path.join(app.config['UPLOAD_FOLDER'], output_filename)
 
-            # Converter o PDF para PPTX
-            pdf_bytes_to_pptx(pdf_bytes, output_file=output_path, model_name=model_name)
+            # Converter o PDF para PPTX com o tema selecionado
+            pdf_bytes_to_pptx(pdf_bytes, output_file=output_path, model_name=model_name, theme=theme)
 
             # Retornar o arquivo para download
             response = send_file(output_path,
@@ -165,26 +205,25 @@ def convert_pdf():
             threading.Thread(target=delayed_file_removal, args=(output_path,)).start()
 
             return response
+
         except Exception as e:
             # Em caso de erro, limpar arquivos temporários
             if os.path.exists(file_path):
                 os.remove(file_path)
-            if os.path.exists(output_path):
+            if 'output_path' in locals() and os.path.exists(output_path):
                 try:
                     os.remove(output_path)
-                except PermissionError:
-                    pass  # Ignorar erro se arquivo estiver em uso
+                except (PermissionError, FileNotFoundError):
+                    pass  # Ignorar erro se arquivo estiver em uso ou não existir
             return jsonify({'error': f'Erro ao processar o arquivo: {str(e)}'}), 500
 
         finally:
             # Limpar apenas o arquivo PDF temporário
-            # O arquivo PPTX será mantido para download e removido posteriormente
             if os.path.exists(file_path):
                 os.remove(file_path)
 
     else:
         return jsonify({'error': 'Tipo de arquivo não permitido. Por favor, envie um PDF.'}), 400
-
 
 @app.route('/models')
 def get_models():
