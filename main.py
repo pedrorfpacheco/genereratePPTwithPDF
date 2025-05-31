@@ -23,8 +23,23 @@ def allowed_file(filename):
 
 
 def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, model_name="llama3", theme="default"):
+    """
+    Converte um PDF em uma apresentação PowerPoint usando Ollama para análise de conteúdo.
+
+    Args:
+        pdf_path (str, optional): Caminho do arquivo PDF de origem
+        pdf_text (str, optional): Texto do PDF já extraído
+        output_file (str, optional): Caminho do arquivo PPTX de saída
+        model_name (str, optional): Nome do modelo Ollama a ser usado
+        theme (str, optional): Tema da apresentação PowerPoint
+
+    Returns:
+        str: Caminho do arquivo PPTX gerado
+    """
+    print(f"Iniciando processamento com modelo: {model_name}")
     ollama_processor = OllamaProcessor(model_name=model_name)
 
+    # Configuração do arquivo de saída
     if not output_file:
         if pdf_path:
             base_name = os.path.splitext(os.path.basename(pdf_path))[0]
@@ -32,62 +47,221 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
         else:
             output_file = "presentation.pptx"
 
+    # Obtenção do texto do documento
     text = pdf_text
-    document_name = None
+    document_name = "Document"
 
     if not text and pdf_path:
-        print(f"Extracting text from PDF: {pdf_path}")
-        extractor = PdfExtractor()
-        text = extractor.extract_text(pdf_path)
-        document_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        print(f"Extraindo texto do PDF: {pdf_path}")
+        try:
+            extractor = PdfExtractor()
+            text = extractor.extract_text(pdf_path)
+            document_name = os.path.splitext(os.path.basename(pdf_path))[0]
+        except Exception as e:
+            print(f"Erro ao extrair texto do PDF: {e}")
+            raise ValueError(f"Falha na extração do texto: {str(e)}")
 
-    if not text:
-        raise ValueError("No text provided or extracted from PDF")
+    if not text or len(text.strip()) < 10:
+        raise ValueError("Texto insuficiente para processamento")
 
-    print("Cleaning and structuring text with Ollama...")
-    cleaned_text = ollama_processor.clean_and_structure_text(text)
+    try:
+        # Limpeza e estruturação do texto
+        print("Limpando e estruturando o texto...")
+        cleaned_text = ollama_processor.clean_and_structure_text(text)
 
-    print("Analyzing document structure with Ollama...")
-    document_structure = ollama_processor.analyze_document_structure(cleaned_text)
+        # Análise estrutural do documento
+        print("Analisando a estrutura do documento...")
+        document_structure = ollama_processor.analyze_document_structure(cleaned_text)
 
-    if isinstance(document_structure, str):
+        # Validação e processamento da estrutura
+        document_structure = normalize_document_structure(document_structure, document_name, text)
+
+        # Geração da apresentação
+        print(f"Gerando apresentação com tema '{theme}'...")
+        converter = PdfToPptxConverter(output_file, ollama_processor, theme=theme)
+        converter.create_presentation(document_structure)
+
+        print(f"Apresentação gerada com sucesso: {output_file}")
+        return output_file
+
+    except Exception as e:
+        print(f"Erro durante o processamento: {str(e)}")
+        # Tentativa de recuperação de erro
+        try:
+            print("Tentando método alternativo de geração...")
+            fallback_structure = create_fallback_structure(text, document_name)
+
+            converter = PdfToPptxConverter(output_file, ollama_processor, theme=theme)
+            converter.create_presentation(fallback_structure)
+
+            print(f"Apresentação gerada via método alternativo: {output_file}")
+            return output_file
+        except Exception as fallback_error:
+            print(f"Falha total no processamento: {str(fallback_error)}")
+            raise ValueError(f"Não foi possível gerar a apresentação: {str(e)}")
+
+
+def normalize_document_structure(structure, document_name, original_text):
+    """
+    Normaliza a estrutura do documento retornada pelo modelo.
+
+    Args:
+        structure (dict/str): Estrutura retornada pelo modelo
+        document_name (str): Nome do documento
+        original_text (str): Texto original para fallback
+
+    Returns:
+        dict: Estrutura normalizada
+    """
+    # Converter string para dict se necessário
+    if isinstance(structure, str):
         try:
             import json
-            document_structure = json.loads(document_structure)
+            structure = json.loads(structure)
         except json.JSONDecodeError:
-            content_text = document_structure
+            # Criar estrutura a partir do texto
+            return create_fallback_structure(original_text, document_name)
 
-            document_structure = {
-                "title": "Document",
-                "subtitle": "",
-                "sections": []
+    if not isinstance(structure, dict):
+        return create_fallback_structure(original_text, document_name)
+
+    # Garantir campos necessários
+    normalized = {
+        "title": structure.get("title", document_name),
+        "subtitle": structure.get("subtitle", ""),
+        "version": structure.get("version", ""),
+        "date": structure.get("date", ""),
+        "sections": []
+    }
+
+    # Processar seções
+    sections = structure.get("sections", [])
+    if not sections:
+        # Extrair seções do texto original se não houver seções
+        paragraphs = [p for p in original_text.split('\n\n') if p.strip()]
+        if paragraphs:
+            normalized["sections"] = [{
+                "title": "Main Content",
+                "content": paragraphs[:10],  # Primeiros 10 parágrafos
+                "importance": "high",
+                "type": "overview"
+            }]
+    else:
+        # Normalizar cada seção
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+
+            normalized_section = {
+                "title": section.get("title", "Untitled Section"),
+                "content": section.get("content", []),
+                "importance": section.get("importance", "medium"),
+                "type": section.get("type", "overview")
             }
 
-            lines = content_text.split('\n')
-            current_section = None
+            # Garantir que content seja uma lista
+            if isinstance(normalized_section["content"], str):
+                normalized_section["content"] = [normalized_section["content"]]
 
-            for line in lines:
-                line = line.strip()
-                if not line:
-                    continue
+            # Filtrar itens vazios
+            normalized_section["content"] = [item for item in normalized_section["content"] if
+                                             item and isinstance(item, str)]
 
-                if line.startswith('#'):
-                    if not document_structure["title"]:
-                        document_structure["title"] = line.lstrip('#').strip()
-                    else:
-                        current_section = {
-                            "title": line.lstrip('#').strip(),
-                            "content": []
-                        }
-                        document_structure["sections"].append(current_section)
-                elif current_section:
-                    current_section["content"].append(line)
+            # Adicionar apenas seções com conteúdo
+            if normalized_section["content"]:
+                normalized["sections"].append(normalized_section)
 
-    print(f"Generating PowerPoint presentation with {theme} theme...")
-    converter = PdfToPptxConverter(output_file, ollama_processor, theme=theme)
-    converter.create_presentation(document_structure)
+    return normalized
 
-    return output_file
+
+def create_fallback_structure(text, document_name):
+    """
+    Cria uma estrutura de fallback básica quando a análise principal falha.
+
+    Args:
+        text (str): Texto do documento
+        document_name (str): Nome do documento
+
+    Returns:
+        dict: Estrutura básica do documento
+    """
+    fallback = {
+        "title": document_name,
+        "subtitle": "",
+        "version": "",
+        "date": "",
+        "sections": []
+    }
+
+    # Dividir em linhas
+    lines = text.split('\n')
+
+    # Encontrar possíveis títulos (linhas curtas com destaque)
+    potential_titles = []
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if line and 10 <= len(line) <= 100:
+            if line.isupper() or line.endswith(':') or line.startswith('#'):
+                potential_titles.append((i, line.lstrip('#').strip()))
+
+    # Criar seções a partir dos títulos identificados
+    if potential_titles:
+        for i in range(len(potential_titles)):
+            start_idx = potential_titles[i][0] + 1
+            end_idx = potential_titles[i + 1][0] if i < len(potential_titles) - 1 else len(lines)
+
+            section_title = potential_titles[i][1]
+            section_content = [l.strip() for l in lines[start_idx:end_idx] if l.strip()]
+
+            # Agrupar linhas em parágrafos significativos
+            paragraphs = []
+            current = []
+            for line in section_content:
+                if len(line) < 3:  # Divisor de parágrafo
+                    if current:
+                        paragraphs.append(' '.join(current))
+                        current = []
+                else:
+                    current.append(line)
+            if current:
+                paragraphs.append(' '.join(current))
+
+            # Adicionar a seção se houver conteúdo
+            if paragraphs:
+                fallback["sections"].append({
+                    "title": section_title,
+                    "content": paragraphs[:7],  # Limitar a 7 pontos
+                    "importance": "medium",
+                    "type": "overview"
+                })
+
+    # Se não conseguirmos identificar seções, criar uma seção geral
+    if not fallback["sections"]:
+        paragraphs = []
+        current = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                if current:
+                    paragraphs.append(' '.join(current))
+                    current = []
+            else:
+                current.append(line)
+        if current:
+            paragraphs.append(' '.join(current))
+
+        # Filtrar parágrafos muito curtos
+        paragraphs = [p for p in paragraphs if len(p) > 20]
+
+        if paragraphs:
+            fallback["sections"].append({
+                "title": "Document Content",
+                "content": paragraphs[:10],
+                "importance": "high",
+                "type": "overview"
+            })
+
+    return fallback
 
 def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="llama3", theme="default"):
     temp_pdf_path = "temp_pdf_file.pdf"

@@ -20,22 +20,26 @@ class OllamaProcessor:
             str: Cleaned and structured text.
         """
         prompt = f"""
-                Please clean and structure the following raw text extracted from a **procedural document** (e.g., a manual, guide, or technical specification).
-                The text may contain OCR artifacts, incorrect line breaks, extra spaces, and mixed formatting.
+        Please clean and structure the following raw text extracted from a **procedural document** (e.g., a manual, guide, or technical specification).
+        The text may contain OCR artifacts, incorrect line breaks, extra spaces, and mixed formatting.
 
-                Your primary goal is to make the text highly readable and usable for further processing, while **strictly preserving all procedural formatting elements**:
-                - **Numbered lists** (e.g., 1., 2., 3.)
-                - **Bullet points** (e.g., -, *, •)
-                - **Headings and subheadings** (e.g., "1. Introduction", "2.1 Setup")
-                - **Important notes, warnings, or tips** (if identifiable).
+        Your primary goal is to make the text highly readable and usable for further processing, while **strictly preserving all procedural formatting elements**:
+        - **Numbered lists** (e.g., 1., 2., 3.)
+        - **Bullet points** (e.g., -, *, •)
+        - **Headings and subheadings** (e.g., "1. Introduction", "2.1 Setup")
+        - **Important notes, warnings, or tips** (if identifiable).
 
-                Remove any unnecessary whitespace, merge broken lines logically, and fix common OCR errors if obvious.
+        **Specific instructions**:
+        1. Remove unnecessary whitespace and merge broken lines logically.
+        2. Fix common OCR errors (e.g., incorrect characters, misplaced symbols) if they are obvious.
+        3. Ensure that procedural elements (lists, headings, notes) are preserved and formatted correctly.
+        4. Maintain the logical flow of the document, ensuring readability and usability.
 
-                TEXT:
-                {text}
+        TEXT:
+        {text}
 
-                Return ONLY the cleaned and well-formatted text. Do not add any conversational filler or explanations.
-                """
+        Return ONLY the cleaned and well-formatted text. Do not add any conversational filler or explanations.
+        """
 
         try:
             response = ollama.chat(model=self.model_name, messages=[
@@ -49,31 +53,49 @@ class OllamaProcessor:
 
     def analyze_document_structure(self, text):
         prompt = f"""
-        Analyze this document and extract its structure. Identify the title, subtitle, version, date, and sections.
-        For each section, identify its title and main points.
+        Analyze the following document and transform it into a structure optimized for a slide presentation.
 
         DOCUMENT:
         {text[:8000]}
 
-        Return the result as a JSON object with the following structure:
+        Return a JSON object with the following structure:
         {{
             "title": "Document Title",
-            "subtitle": "Subtitle if it exists",
-            "version": "Version if mentioned",
-            "date": "Date if mentioned",
+            "subtitle": "Subtitle (if available)",
+            "version": "Version (if mentioned)",
+            "date": "Date (if mentioned)",
             "sections": [
                 {{
-                    "title": "Section Name 1",
-                    "content": ["Point 1", "Point 2", "..."]
-                }},
-                {{
-                    "title": "Section Name 2", 
-                    "content": ["Point 1", "Point 2", "..."]
+                    "title": "Section Title",
+                    "content": ["Point 1", "Point 2", "..."],
+                    "importance": "high|medium|low",
+                    "type": "overview|procedure|warning|summary"
                 }}
             ]
         }}
 
-        Use valid JSON format with no trailing commas. Do not include extra explanations, only the JSON.
+        **Guidelines**:
+        1. **Purpose**: The presentation should effectively communicate the document's key points to an audience. Focus on clarity, conciseness, and visual impact.
+        2. **Content Selection**:
+           - Identify the most important topics and ideas from the document.
+           - Prioritize information that is relevant to the audience and purpose of the presentation.
+        3. **Content Transformation**:
+           - Preserve concise lists that are already suitable for slides.
+           - Break down lengthy paragraphs into key points of 1-2 lines each.
+           - Summarize detailed instructions into main steps.
+           - Simplify complex concepts into visually digestible points.
+        4. **Length Control**:
+           - Ensure each point is short enough to fit on a slide (maximum 2 lines).
+           - If necessary, split long points into smaller, more manageable ones.
+        5. **Structure and Flow**:
+           - Organize sections in a logical order to create a narrative flow.
+           - Use headings and subheadings to guide the audience through the content.
+        6. **Classification**:
+           - Assess the importance of each section (high/medium/low) based on its relevance to the presentation.
+           - Classify the type of each section (overview, procedure, warning, summary) to guide its visual representation.
+        7. **Output**:
+           - Return only valid JSON, without additional explanations or comments.
+           - Ensure the JSON is well-structured and adheres to the specified format.
         """
 
         try:
@@ -134,45 +156,3 @@ class OllamaProcessor:
                     "content": ["The document could not be properly parsed."]
                 }]
             }
-
-    def generate_slide_content(self, section_text, section_title):
-        """
-        Uses Ollama to generate slide content from a section's text.
-
-        Args:
-            section_text (str): Text of the section.
-            section_title (str): Title of the section.
-
-        Returns:
-            list: List of bullet points for the slide.
-        """
-        prompt = f"""
-        Create content for a PowerPoint slide based on the following text from the section "{section_title}".
-        Extract 3-5 main points that are clear and concise.
-
-        SECTION TEXT:
-        {section_text}
-
-        Return only the points, one per line, without numbering or bullet points.
-        """
-
-        try:
-            response = ollama.chat(model=self.model_name, messages=[
-                {'role': 'user', 'content': prompt}
-            ])
-
-            content = response['message']['content']
-
-            points = [line.strip() for line in content.split('\n') if line.strip()]
-
-            cleaned_points = []
-            for point in points:
-                point = re.sub(r'^[\*\-•\d]+[\.\)]\s*', '', point)
-                if point:
-                    cleaned_points.append(point)
-
-            return cleaned_points
-        except Exception as e:
-            print(f"Error generating slide content with Ollama: {e}")
-            sentences = re.split(r'[.!?]+', section_text)
-            return [s.strip() for s in sentences if len(s.strip()) > 20][:5]
