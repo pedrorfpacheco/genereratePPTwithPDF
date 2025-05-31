@@ -4,21 +4,11 @@ import ollama
 
 
 class OllamaProcessor:
-    """Class for processing text using Ollama models"""
 
     def __init__(self, model_name="llama3"):
         self.model_name = model_name
 
     def clean_and_structure_text(self, text):
-        """
-        Uses Ollama to clean and structure poorly formatted text.
-
-        Args:
-            text (str): Text extracted from the PDF.
-
-        Returns:
-            str: Cleaned and structured text.
-        """
         prompt = f"""
         Please clean and structure the following raw text extracted from a **procedural document** (e.g., a manual, guide, or technical specification).
         The text may contain OCR artifacts, incorrect line breaks, extra spaces, and mixed formatting.
