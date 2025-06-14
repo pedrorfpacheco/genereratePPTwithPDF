@@ -245,17 +245,38 @@ def create_fallback_structure(text, document_name):
 
 
 def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="llama3", theme="default"):
-    temp_pdf_path = "temp_pdf_file.pdf"
+    # Garantir que a pasta uploads exista
+    uploads_folder = app.config['UPLOAD_FOLDER']
+    os.makedirs(uploads_folder, exist_ok=True)
+
+    # Criar nomes de arquivos únicos baseados em timestamp
+    import time
+    timestamp = int(time.time())
+    temp_pdf_path = os.path.join(uploads_folder, f"temp_pdf_{timestamp}.pdf")
+
     with open(temp_pdf_path, "wb") as f:
         f.write(pdf_bytes)
 
     try:
-        result = pdf_to_pptx_with_ollama(pdf_path=temp_pdf_path, output_file=output_file,
-                                         model_name=model_name, theme=theme)
+        # Usar o caminho completo para o arquivo temporário
+        result = pdf_to_pptx_with_ollama(
+            pdf_path=temp_pdf_path,
+            output_file=output_file,
+            model_name=model_name,
+            theme=theme
+        )
         return result
+    except Exception as e:
+        print(f"Erro ao processar PDF: {str(e)}")
+        raise e
     finally:
+        # Limpeza do arquivo temporário
         if os.path.exists(temp_pdf_path):
-            os.remove(temp_pdf_path)
+            try:
+                os.remove(temp_pdf_path)
+                print(f"Arquivo temporário removido: {temp_pdf_path}")
+            except Exception as e:
+                print(f"Erro ao remover arquivo temporário: {str(e)}")
 
 
 @app.route('/')
