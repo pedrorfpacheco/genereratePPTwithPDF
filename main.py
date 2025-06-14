@@ -23,6 +23,9 @@ def allowed_file(filename):
 
 
 def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, model_name="llama3", theme="default"):
+    """
+    Converte um PDF em uma apresentação PowerPoint usando processamento de texto e imagens.
+    """
     print(f"Starting processing with model: {model_name}")
     ollama_processor = OllamaProcessor(model_name=model_name)
 
@@ -34,19 +37,27 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
         else:
             output_file = "presentation.pptx"
 
-    # Obtenção do texto do documento
     text = pdf_text
     document_name = "Document"
+    image_data = []
 
+    # Extração de texto e imagens do PDF
     if not text and pdf_path:
         print(f"Extracting text from PDF: {pdf_path}")
         try:
             extractor = PdfExtractor()
             text = extractor.extract_text(pdf_path)
             document_name = os.path.splitext(os.path.basename(pdf_path))[0]
+
+            # Extrair imagens do PDF
+            print("Extracting images from PDF...")
+            from image_extractor import ImageExtractor
+            image_data = ImageExtractor.extract_images_from_pdf(pdf_path)
+            print(f"Found {len(image_data)} images in the PDF")
+
         except Exception as e:
-            print(f"Error extracting text from PDF: {e}")
-            raise ValueError(f"Failure to extract text: {str(e)}")
+            print(f"Error extracting text or images from PDF: {e}")
+            raise ValueError(f"Failure to extract text or images: {str(e)}")
 
     if not text or len(text.strip()) < 10:
         raise ValueError("Insufficient text for processing")
@@ -58,15 +69,14 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
 
         # Análise estrutural do documento
         print("Analyzing the structure of the document...")
-        document_structure = ollama_processor.analyze_document_structure(cleaned_text)
-
+        document_structure = ollama_processor.analyze_document_with_images(cleaned_text, image_data)
         # Validação e processamento da estrutura
         document_structure = normalize_document_structure(document_structure, document_name, text)
 
         # Geração da apresentação
         print(f"Generating presentation with theme '{theme}'...")
         converter = PdfToPptxConverter(output_file, ollama_processor, theme=theme)
-        converter.create_presentation(document_structure)
+        converter.create_presentation(document_structure, image_data)
 
         print(f"Presentation successfully generated: {output_file}")
         return output_file
@@ -79,13 +89,33 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
             fallback_structure = create_fallback_structure(text, document_name)
 
             converter = PdfToPptxConverter(output_file, ollama_processor, theme=theme)
-            converter.create_presentation(fallback_structure)
+            converter.create_presentation(fallback_structure, image_data)
 
             print(f"Presentation generated via alternative method: {output_file}")
             return output_file
         except Exception as fallback_error:
             print(f"Total processing failure: {str(fallback_error)}")
-            raise ValueError(f"The presentation could not be generated.: {str(e)}")
+            raise ValueError(f"The presentation could not be generated: {str(e)}")
+
+    finally:
+        # Limpar arquivos temporários de imagens
+        for img in image_data:
+            try:
+                img_path = img['path'] if isinstance(img, dict) else img
+                if os.path.exists(img_path):
+                    os.remove(img_path)
+            except Exception as e:
+                print(f"Error cleaning temporary file: {e}")
+
+        # Remover diretório temporário se estiver vazio
+        if image_data:
+            try:
+                img_path = image_data[0]['path'] if isinstance(image_data[0], dict) else image_data[0]
+                img_dir = os.path.dirname(img_path)
+                if os.path.exists(img_dir) and not os.listdir(img_dir):
+                    os.rmdir(img_dir)
+            except Exception as e:
+                print(f"Error removing temporary directory: {e}")
 
 
 def normalize_document_structure(structure, document_name, original_text):

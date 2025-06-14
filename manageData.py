@@ -146,3 +146,112 @@ class OllamaProcessor:
                     "content": ["The document could not be properly parsed."]
                 }]
             }
+
+    def analyze_document_with_images(self, text, image_data):
+        """
+        Analisa o documento considerando o texto e as imagens disponíveis para criar uma estrutura
+        que associa imagens a seções específicas do documento.
+
+        Args:
+            text (str): O texto do documento
+            image_data (list): Lista de dicionários contendo informações das imagens extraídas
+
+        Returns:
+            dict: Estrutura do documento com imagens associadas às seções
+        """
+        # Primeiro, obtemos a estrutura básica do documento
+        doc_structure = self.analyze_document_structure(text)
+
+        if not image_data or not isinstance(image_data, list) or len(image_data) == 0:
+            return doc_structure
+
+        # Preparar um resumo das imagens para o prompt
+        image_summary = []
+        for i, img in enumerate(image_data[:10]):  # Limitamos a 10 imagens para o prompt
+            page_num = img.get("page_num", "desconhecida")
+            dimensions = f"{img.get('width', 0)}x{img.get('height', 0)}"
+            image_summary.append(f"Imagem {i + 1}: Página {page_num + 1}, Dimensões {dimensions}")
+
+        image_info = "\n".join(image_summary)
+
+        # Criamos um prompt para analisar a relação entre texto e imagens
+        prompt = f"""
+        Analise este documento que contém texto e imagens. Preciso entender como as imagens se relacionam 
+        com o conteúdo textual para criar slides eficazes.
+
+        DOCUMENTO (resumo do texto):
+        {text[:2000]}...
+
+        IMAGENS DISPONÍVEIS:
+        {image_info}
+
+        Baseado no texto do documento, analise como estas imagens provavelmente se relacionam ao conteúdo.
+        Para cada seção do documento, indique:
+        1. Quais imagens provavelmente estão relacionadas a esta seção
+        2. Como estas imagens devem ser apresentadas (ao lado do texto, como fundo, etc.)
+        3. Se a seção possui referências explícitas a figuras, gráficos ou diagramas
+
+        Formato de resposta (JSON):
+        {{
+            "sections": [
+                {{
+                    "title": "Título da Seção",
+                    "relevant_images": [0, 2],  // Índices das imagens relevantes (0-indexed)
+                    "image_references": ["Figura 1", "Gráfico 2.1"],  // Referências textuais a imagens
+                    "presentation_style": "side-by-side"  // Como apresentar (side-by-side, background, standalone)
+                }}
+            ]
+        }}
+        """
+
+        try:
+            response = ollama.chat(model=self.model_name, messages=[
+                {'role': 'user', 'content': prompt}
+            ])
+
+            if not response or 'message' not in response:
+                raise ValueError("Resposta da API Ollama vazia ou inválida")
+
+            result = response['message']['content']
+
+            # Extrair JSON da resposta
+            json_match = re.search(r'```json\s*([\s\S]*?)\s*```', result)
+            if json_match:
+                result = json_match.group(1)
+
+            result = re.sub(r'^[^{]*', '', result)
+            result = re.sub(r'[^}]*$', '', result)
+
+            try:
+                import json
+                image_analysis = json.loads(result)
+
+                # Agora, enriquecemos a estrutura original do documento com as informações sobre imagens
+                sections_with_images = {}
+                for section in image_analysis.get("sections", []):
+                    section_title = section.get("title")
+                    if section_title:
+                        sections_with_images[section_title] = {
+                            "relevant_images": section.get("relevant_images", []),
+                            "image_references": section.get("image_references", []),
+                            "presentation_style": section.get("presentation_style", "side-by-side")
+                        }
+
+                # Adicionar informações de imagens à estrutura do documento
+                for section in doc_structure.get("sections", []):
+                    section_title = section.get("title")
+                    if section_title in sections_with_images:
+                        section["image_info"] = sections_with_images[section_title]
+                        section["has_images"] = True
+                    else:
+                        section["has_images"] = False
+
+                return doc_structure
+
+            except json.JSONDecodeError as e:
+                print(f"Erro ao decodificar JSON da análise de imagens: {e}")
+                return doc_structure
+
+        except Exception as e:
+            print(f"Erro ao analisar documento com imagens: {e}")
+            return doc_structure

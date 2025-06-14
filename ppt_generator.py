@@ -1,3 +1,4 @@
+import os
 import re
 from pptx import Presentation
 from pptx.util import Inches, Pt
@@ -229,6 +230,102 @@ class PdfToPptxConverter:
 
         return slide
 
+    def _add_content_slide_with_image(self, title, content_points, image_path):
+        """
+        Adiciona um slide que contém texto e imagem lado a lado com proporções corretas
+        """
+        slide_layout = self.prs.slide_layouts[1]
+        slide = self.prs.slides.add_slide(slide_layout)
+
+        # Configurar título
+        title_shape = slide.shapes.title
+        title_shape.text = title
+
+        title_shape.left = Inches(0.5)
+        title_shape.top = Inches(0.3)
+        title_shape.width = Inches(12.33)
+        title_shape.height = Inches(1.0)
+
+        p = title_shape.text_frame.paragraphs[0]
+        p.font.size = self.header_font_size
+        p.font.bold = True
+        p.font.color.rgb = self.title_color
+
+        # Se não tiver imagem ou a imagem não existir, cria slide normal de conteúdo
+        if not image_path or not os.path.exists(image_path):
+            return self._add_content_slide(title, content_points)
+
+        # Verificar a imagem e suas proporções
+        try:
+            from PIL import Image
+            img = Image.open(image_path)
+            img_width, img_height = img.size
+            aspect_ratio = img_width / img_height
+        except Exception as e:
+            print(f"Erro ao analisar imagem: {e}")
+            return self._add_content_slide(title, content_points)
+
+        # Layout de duas colunas (texto à esquerda, imagem à direita)
+        # Configurar área de texto (60% da largura do slide)
+        text_left = Inches(0.8)
+        text_top = Inches(1.5)
+        text_width = Inches(7.0)  # 60% da largura útil
+        text_height = Inches(5.0)
+
+        # Adicionar área de texto
+        content = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
+        text_frame = content.text_frame
+        text_frame.word_wrap = True
+        text_frame.margin_left = Inches(0.1)
+        text_frame.margin_right = Inches(0.1)
+
+        # Adicionar os pontos de conteúdo no texto
+        for point in content_points:
+            if point and isinstance(point, str):
+                p = text_frame.add_paragraph()
+                p.text = point.strip()
+                p.font.size = self.content_font_size
+                p.font.color.rgb = self.text_color
+
+                # Adicionar marcadores para listas
+                if point.strip().startswith(('-', '•', '*')) or re.match(r'^\d+\.', point.strip()):
+                    p.level = 1
+
+                # Espaço entre parágrafos
+                p.space_after = Pt(6)
+
+        # Configurar área da imagem (40% da largura)
+        img_left = Inches(8.3)  # Após a área de texto
+        img_top = Inches(1.5)
+        img_max_width = Inches(4.0)
+        img_max_height = Inches(5.0)
+
+        # Calcular dimensões para manter proporção
+        if aspect_ratio > 1:  # Imagem é mais larga que alta
+            img_width = min(img_max_width, Inches(4.0))
+            img_height = img_width / aspect_ratio
+            if img_height > img_max_height:
+                img_height = img_max_height
+                img_width = img_height * aspect_ratio
+        else:  # Imagem é mais alta que larga
+            img_height = min(img_max_height, Inches(5.0))
+            img_width = img_height * aspect_ratio
+            if img_width > img_max_width:
+                img_width = img_max_width
+                img_height = img_width / aspect_ratio
+
+        # Centralizar a imagem verticalmente
+        if img_height < img_max_height:
+            img_top = img_top + (img_max_height - img_height) / 2
+
+        # Centralizar a imagem horizontalmente na área reservada
+        img_left = img_left + (img_max_width - img_width) / 2
+
+        # Adicionar a imagem ao slide
+        slide.shapes.add_picture(image_path, img_left, img_top, width=img_width, height=img_height)
+
+        return slide
+
     def _add_table_slide(self, title, table_data):
         slide_layout = self.prs.slide_layouts[1]
         slide = self.prs.slides.add_slide(slide_layout)
@@ -303,7 +400,7 @@ class PdfToPptxConverter:
 
         return table_data
 
-    def create_presentation(self, document_structure):
+    def create_presentation(self, document_structure, image_data=None):
         if not isinstance(document_structure, dict):
             document_structure = self._convert_to_structure(document_structure)
 
@@ -326,34 +423,67 @@ class PdfToPptxConverter:
 
         sections = document_structure.get('sections', [])
         if sections:
+            # Slide de visão geral
             overview_points = [section['title'] for section in sections]
             if overview_points:
-                self._add_content_slide("Overview", overview_points[:8])
+                self._add_content_slide("Visão Geral", overview_points[:8])
 
-            for section in sections:
+            # Preparar mapeamento de imagens por página/seção
+            section_images = {}
+
+            if image_data and isinstance(image_data, list):
+                for img in image_data:
+                    if isinstance(img, dict) and "page_num" in img and "path" in img:
+                        page_num = img["page_num"]
+                        img_path = img["path"]
+
+                        for idx, section in enumerate(sections):
+                            if "page_range" in section and section["page_range"][0] <= page_num <= \
+                                    section["page_range"][1]:
+                                if idx not in section_images:
+                                    section_images[idx] = []
+                                section_images[idx].append(img_path)
+                                break
+
+            # Criar slides para cada seção
+            for idx, section in enumerate(sections):
                 section_title = section['title']
                 section_content = section.get('content', [])
 
-                is_table = isinstance(section_content, list) and len(section_content) > 0 and isinstance(
-                    section_content[0], list)
+                selected_image_data = self._select_image_for_section(section, image_data)
+                use_image = selected_image_data is not None
+                selected_image = selected_image_data["path"] if selected_image_data else None
 
-                if is_table:
-                    self._add_table_slide(section_title, section_content)
-                elif isinstance(section_content, list) and section_content:
-                    if len(section_content) <= 6:
-                        self._add_content_slide(section_title, section_content)
-                    else:
-                        chunks = [section_content[i:i + 6] for i in range(0, len(section_content), 6)]
-                        for i, chunk in enumerate(chunks):
-                            slide_title = section_title if i == 0 else f"{section_title} (cont.)"
-                            self._add_content_slide(slide_title, chunk)
+                # E também verifique se há estilo de apresentação específico
+                presentation_style = None
+                if "image_info" in section and "presentation_style" in section["image_info"]:
+                    presentation_style = section["image_info"]["presentation_style"]
+
+                # Criar slide com ou sem imagem
+                if use_image and selected_image:
+                    self._add_content_slide_with_image(section_title, section_content, selected_image)
                 else:
-                    continue
+                    self._add_content_slide(section_title, section_content)
 
-        self._add_section_slide("Thank You")
+        # Slide final
+        self._add_section_slide("Obrigado")
 
         self.prs.save(self.output_filename)
         print(f"Presentation created and saved as {self.output_filename}")
+
+    def _is_image_relevant(self, section_content, image_path):
+        """
+        Verifica se a imagem é relevante para o conteúdo da seção.
+        """
+        keywords = ["diagrama", "gráfico", "figura", "imagem", "visualização"]
+        content_text = " ".join(section_content).lower()
+
+        # Verificar se o conteúdo menciona palavras-chave relacionadas a imagens
+        if any(keyword in content_text for keyword in keywords):
+            return True
+
+        # Adicionar outras verificações, como análise de similaridade, se necessário
+        return False
 
     def _convert_to_structure(self, text_content):
         import re
@@ -400,3 +530,36 @@ class PdfToPptxConverter:
             }]
 
         return structure
+
+    def _select_image_for_section(self, section, image_data):
+        """
+        Seleciona a imagem mais adequada para uma seção com base na análise.
+
+        Args:
+            section (dict): A seção do documento
+            image_data (list): Lista de dados de imagens disponíveis
+
+        Returns:
+            dict ou None: Dados da imagem selecionada ou None se não houver imagem adequada
+        """
+        if not image_data or not section.get("has_images", False):
+            return None
+
+        image_info = section.get("image_info", {})
+        relevant_images = image_info.get("relevant_images", [])
+
+        if not relevant_images:
+            # Estratégia alternativa: procurar referências a imagens no texto
+            content_text = " ".join(section.get("content", [])).lower()
+            if any(keyword in content_text for keyword in ["figura", "imagem", "gráfico", "diagrama", "ilustração"]):
+                # Se houver referência a imagens no texto, selecionar a primeira imagem disponível
+                if image_data:
+                    return image_data[0]
+            return None
+
+        # Selecionar a primeira imagem relevante que existe em image_data
+        for img_index in relevant_images:
+            if 0 <= img_index < len(image_data):
+                return image_data[img_index]
+
+        return None
