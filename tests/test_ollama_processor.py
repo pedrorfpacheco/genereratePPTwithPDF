@@ -1,6 +1,6 @@
 # tests/test_ollama_processor.py
-import pytest
 from unittest.mock import patch, MagicMock
+
 from manageData import OllamaProcessor
 
 

@@ -1,7 +1,8 @@
 # tests/test_pdf_extractor.py
-import pytest
 from unittest.mock import patch, MagicMock
-import os
+
+import pytest
+
 from readPDF import PdfExtractor
 
 

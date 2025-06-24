@@ -1,7 +1,6 @@
 # tests/test_ppt_generator.py
-import pytest
 from unittest.mock import patch, MagicMock
-import os
+
 from ppt_generator import PdfToPptxConverter
 
 
