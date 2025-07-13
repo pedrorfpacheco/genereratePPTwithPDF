@@ -1,0 +1,52 @@
+@startuml PDF to PowerPoint Architecture
+!theme plain
+skinparam backgroundColor #FEFEFE
+skinparam componentStyle rectangle
+
+package "Interface" {
+  [ui.html] as WebUI
+}
+
+package "Controller" {
+  [main.py] as FlaskServer
+}
+
+package "Extraction" {
+  [readPDF.py] as PdfExtractor
+  [image_extractor.py] as ImageExtractor
+  [PyPDF2] as PyPDF2Lib
+  [PDFMiner] as PDFMinerLib
+  [PyMuPDF (fitz)] as FitzLib
+  [PIL] as PILLib
+}
+
+package "Processing" {
+  [manageData.py] as OllamaProcessor
+  [ollama] as OllamaAPI
+}
+
+package "Generation" {
+  [ppt_generator.py] as PPTGenerator
+  [python-pptx] as PPTXLib
+}
+
+' Conections between components
+WebUI --> FlaskServer : Upload PDF
+FlaskServer --> PdfExtractor : Extract text
+FlaskServer --> ImageExtractor : Extract images
+FlaskServer --> OllamaProcessor : Process text
+FlaskServer --> PPTGenerator : Generate Presentation
+
+PdfExtractor --> PyPDF2Lib
+PdfExtractor --> PDFMinerLib
+ImageExtractor --> FitzLib
+ImageExtractor --> PILLib
+OllamaProcessor --> OllamaAPI
+PPTGenerator --> PPTXLib
+
+OllamaProcessor ..> PPTGenerator : Provides structure
+
+' Data flow
+WebUI <-- FlaskServer : Return PPTX file
+
+@enduml
