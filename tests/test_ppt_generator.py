@@ -14,7 +14,7 @@ class TestPdfToPptxConverter:
 
     @patch('pptx.Presentation')
     def test_add_title_slide(self, mock_presentation_class):
-        # Configurar mocks
+        # Configure mocks
         mock_presentation = MagicMock()
         mock_presentation_class.return_value = mock_presentation
 
@@ -32,12 +32,12 @@ class TestPdfToPptxConverter:
         mock_placeholders = [MagicMock(), MagicMock()]
         mock_slide.placeholders = mock_placeholders
 
-        # Criar o conversor e chamar o método
+        # Create the converter and call the method
         converter = PdfToPptxConverter()
         converter.prs = mock_presentation
 
-        result = converter._add_title_slide("Título de Teste", "Subtítulo")
+        result = converter._add_title_slide("Test Title", "Subtitle")
 
-        # Verificar se o método foi chamado corretamente
+        # Verify if the method was called correctly
         mock_slides.add_slide.assert_called_once()
-        assert mock_title_shape.text == "Título de Teste"
+        assert mock_title_shape.text == "Test Title"

@@ -10,85 +10,85 @@ class TestPdfExtractor:
 
     @patch('readPDF.PyPDF2.PdfReader')
     def test_extract_with_pypdf2(self, mock_pdf_reader):
-        # Configurar o mock do PdfReader
+        # Configure the PdfReader mock
         mock_reader = MagicMock()
         mock_pdf_reader.return_value = mock_reader
 
-        # Configurar páginas mock
+        # Configure mock pages
         mock_page = MagicMock()
-        mock_page.extract_text.return_value = "Texto da página"
-        mock_reader.pages = [mock_page, mock_page]  # Simula duas páginas
+        mock_page.extract_text.return_value = "Page text"
+        mock_reader.pages = [mock_page, mock_page]  # Simulate two pages
 
-        # Patch para abrir arquivo que não existe
+        # Patch to open a non-existent file
         with patch('builtins.open', MagicMock()):
-            result = PdfExtractor.extract_with_pypdf2("teste.pdf")
+            result = PdfExtractor.extract_with_pypdf2("test.pdf")
 
-        # Verificar resultado
-        assert "Texto da página" in result
+        # Verify result
+        assert "Page text" in result
         assert mock_page.extract_text.call_count == 2
 
     @patch('readPDF.pdfminer_extract_text')
     def test_extract_with_pdfminer(self, mock_extract_text):
-        # Configurar o mock do pdfminer_extract_text
-        mock_extract_text.return_value = "Texto extraído com PDFMiner"
+        # Configure the pdfminer_extract_text mock
+        mock_extract_text.return_value = "Text extracted with PDFMiner"
 
-        # Chamar a função
-        result = PdfExtractor.extract_with_pdfminer("teste.pdf")
+        # Call the function
+        result = PdfExtractor.extract_with_pdfminer("test.pdf")
 
-        # Verificações
-        assert result == "Texto extraído com PDFMiner"
+        # Assertions
+        assert result == "Text extracted with PDFMiner"
         mock_extract_text.assert_called_once()
 
     @patch('readPDF.PdfExtractor.extract_with_pypdf2')
     @patch('readPDF.PdfExtractor.extract_with_pdfminer')
     def test_extract_text_success(self, mock_pdfminer, mock_pypdf2):
-        # Configurar resultados dos mocks
-        mock_pypdf2.return_value = "Texto PyPDF2 mais curto"
-        mock_pdfminer.return_value = "Texto PDFMiner com conteúdo bem mais extenso"
+        # Configure mock results
+        mock_pypdf2.return_value = "Shorter PyPDF2 text"
+        mock_pdfminer.return_value = "Much longer PDFMiner text content"
 
-        # Testar a função principal
-        result = PdfExtractor.extract_text("arquivo_teste.pdf")
+        # Test the main function
+        result = PdfExtractor.extract_text("test_file.pdf")
 
-        # Deve escolher o texto mais longo (PDFMiner neste caso)
-        assert result == "Texto PDFMiner com conteúdo bem mais extenso"
-        mock_pypdf2.assert_called_once_with("arquivo_teste.pdf")
-        mock_pdfminer.assert_called_once_with("arquivo_teste.pdf")
+        # Should choose the longer text (PDFMiner in this case)
+        assert result == "Much longer PDFMiner text content"
+        mock_pypdf2.assert_called_once_with("test_file.pdf")
+        mock_pdfminer.assert_called_once_with("test_file.pdf")
 
     @patch('readPDF.PdfExtractor.extract_with_pypdf2')
     @patch('readPDF.PdfExtractor.extract_with_pdfminer')
     def test_extract_text_fallback_to_pypdf2(self, mock_pdfminer, mock_pypdf2):
-        # Simular falha no PDFMiner
+        # Simulate PDFMiner failure
         mock_pdfminer.return_value = None
-        mock_pypdf2.return_value = "Texto de fallback do PyPDF2"
+        mock_pypdf2.return_value = "PyPDF2 fallback text"
 
-        result = PdfExtractor.extract_text("arquivo_teste.pdf")
+        result = PdfExtractor.extract_text("test_file.pdf")
 
-        # Deve usar PyPDF2 como fallback
-        assert result == "Texto de fallback do PyPDF2"
+        # Should use PyPDF2 as fallback
+        assert result == "PyPDF2 fallback text"
 
     @patch('readPDF.PdfExtractor.extract_with_pypdf2')
     @patch('readPDF.PdfExtractor.extract_with_pdfminer')
     def test_extract_text_all_methods_fail(self, mock_pdfminer, mock_pypdf2):
-        # Simular falha em ambos os métodos
+        # Simulate failure in both methods
         mock_pdfminer.return_value = None
         mock_pypdf2.return_value = None
 
-        # Deve lançar exceção quando todos os métodos falham
+        # Should raise an exception when all methods fail
         with pytest.raises(Exception) as excinfo:
-            PdfExtractor.extract_text("arquivo_inexistente.pdf")
+            PdfExtractor.extract_text("non_existent_file.pdf")
 
         assert "Could not extract text from PDF using any method" in str(excinfo.value)
 
     @pytest.fixture
     def sample_pdf_path(self, tmp_path):
-        # Criar um arquivo de teste vazio
+        # Create an empty test file
         pdf_path = tmp_path / "sample.pdf"
-        pdf_path.write_bytes(b"%PDF-1.5\n")  # Cabeçalho PDF mínimo
+        pdf_path.write_bytes(b"%PDF-1.5\n")  # Minimal PDF header
         return str(pdf_path)
 
     def test_integration_with_sample_file(self, sample_pdf_path):
-        # Este teste só será executado se os mocks acima não interferirem
-        with patch('readPDF.PdfExtractor.extract_with_pypdf2', return_value="Texto extraído"):
+        # This test will only run if the above mocks do not interfere
+        with patch('readPDF.PdfExtractor.extract_with_pypdf2', return_value="Extracted text"):
             with patch('readPDF.PdfExtractor.extract_with_pdfminer', return_value=None):
                 result = PdfExtractor.extract_text(sample_pdf_path)
-                assert result == "Texto extraído"
+                assert result == "Extracted text"

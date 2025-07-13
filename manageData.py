@@ -176,31 +176,33 @@ class OllamaProcessor:
 
         # Criamos um prompt para analisar a relação entre texto e imagens
         prompt = f"""
-        Analise este documento que contém texto e imagens. Preciso entender como as imagens se relacionam 
-        com o conteúdo textual para criar slides eficazes.
+        Analyze this document which contains text and images. I need to understand how the images relate to the textual content to create effective slides.
 
-        DOCUMENTO (resumo do texto):
+        DOCUMENT (text summary):
         {text[:2000]}...
 
-        IMAGENS DISPONÍVEIS:
+        AVAILABLE IMAGES:
         {image_info}
-
-        Baseado no texto do documento, analise como estas imagens provavelmente se relacionam ao conteúdo.
-        Para cada seção do documento, indique:
-        1. Quais imagens provavelmente estão relacionadas a esta seção
-        2. Como estas imagens devem ser apresentadas (ao lado do texto, como fundo, etc.)
-        3. Se a seção possui referências explícitas a figuras, gráficos ou diagramas
-
-        Formato de resposta (JSON):
+        
+        Based on the document's text, analyze how these images likely relate to the content.
+        For each document section, indicate:
+        
+        Which images are likely related to this section
+        
+        How these images should be presented (side-by-side with text, as background, etc.)
+        
+        If the section has explicit references to figures, graphs, or diagrams
+        
+        Response format (JSON):
         {{
             "sections": [
-                {{
-                    "title": "Título da Seção",
-                    "relevant_images": [0, 2],  // Índices das imagens relevantes (0-indexed)
-                    "image_references": ["Figura 1", "Gráfico 2.1"],  // Referências textuais a imagens
-                    "presentation_style": "side-by-side"  // Como apresentar (side-by-side, background, standalone)
-                }}
-            ]
+        {{
+            "title": "Section Title",
+            "relevant_images": [0, 2],  // Indices of relevant images (0-indexed)
+            "image_references": ["Figure 1", "Graph 2.1"],  // Textual references to images
+            "presentation_style": "side-by-side"  // How to present (side-by-side, background, standalone)
+        }}
+        ]
         }}
         """
 

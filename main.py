@@ -352,6 +352,7 @@ def get_models():
     models = [
         {"id": "llama3.2:1b", "name": "Llama 3.2 (1B)"},
         {"id": "deepseek-r1:14b", "name": "DeepSeek R1 (14B)"},
+        {"id": "gemma3:12b", "name": "Gemma3 (12B)"},
     ]
     return jsonify(models)
 
