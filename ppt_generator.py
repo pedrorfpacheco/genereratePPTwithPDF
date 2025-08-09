@@ -233,12 +233,12 @@ class PdfToPptxConverter:
 
     def _add_content_slide_with_image(self, title, content_points, image_path):
         """
-        Adiciona um slide que contém texto e imagem lado a lado com proporções corretas
+        Adds a slide with text and image side by side with automatic sizing.
         """
-        slide_layout = self.prs.slide_layouts[1]
+        slide_layout = self.prs.slide_layouts[1]  # Layout with title and content
         slide = self.prs.slides.add_slide(slide_layout)
 
-        # Configurar título
+        # Configure title
         title_shape = slide.shapes.title
         title_shape.text = title
 
@@ -252,78 +252,79 @@ class PdfToPptxConverter:
         p.font.bold = True
         p.font.color.rgb = self.title_color
 
-        # Se não tiver imagem ou a imagem não existir, cria slide normal de conteúdo
+        # If there's no image or the image doesn't exist, create normal content slide
         if not image_path or not os.path.exists(image_path):
+            print(f"Image not found: {image_path}")
             return self._add_content_slide(title, content_points)
 
-        # Verificar a imagem e suas proporções
+        # Check image dimensions
         try:
             from PIL import Image
             img = Image.open(image_path)
             img_width, img_height = img.size
             aspect_ratio = img_width / img_height
+            print(f"Adding image: {image_path}, dimensions: {img_width}x{img_height}")
         except Exception as e:
-            print(f"Erro ao analisar imagem: {e}")
+            print(f"Error analyzing image: {e}")
             return self._add_content_slide(title, content_points)
 
-        # Layout de duas colunas (texto à esquerda, imagem à direita)
-        # Configurar área de texto (60% da largura do slide)
+        # Configure slide division: 60% text, 40% image
         text_left = Inches(0.8)
         text_top = Inches(1.5)
-        text_width = Inches(7.0)  # 60% da largura útil
+        text_width = Inches(6.5)  # Reduced to give more space to the image
         text_height = Inches(5.0)
 
-        # Adicionar área de texto
+        # Add text area
         content = slide.shapes.add_textbox(text_left, text_top, text_width, text_height)
         text_frame = content.text_frame
         text_frame.word_wrap = True
         text_frame.margin_left = Inches(0.1)
         text_frame.margin_right = Inches(0.1)
 
-        # Adicionar os pontos de conteúdo no texto
-        for point in content_points:
+        # Add content with bullet points
+        for i, point in enumerate(content_points):
             if point and isinstance(point, str):
-                p = text_frame.add_paragraph()
+                if i == 0:
+                    p = text_frame.paragraphs[0]
+                else:
+                    p = text_frame.add_paragraph()
+
                 p.text = point.strip()
                 p.font.size = self.content_font_size
                 p.font.color.rgb = self.text_color
+                p.level = 0  # Bullet level
+                p.space_after = Pt(6)  # Spacing after paragraph
 
-                # Adicionar marcadores para listas
-                if point.strip().startswith(('-', '•', '*')) or re.match(r'^\d+\.', point.strip()):
-                    p.level = 1
-
-                # Espaço entre parágrafos
-                p.space_after = Pt(6)
-
-        # Configurar área da imagem (40% da largura)
-        img_left = Inches(8.3)  # Após a área de texto
+        # Calculate ideal dimensions for the image
+        img_left = Inches(7.5)  # Positioned further left to give adequate space
         img_top = Inches(1.5)
-        img_max_width = Inches(4.0)
+        img_max_width = Inches(5.0)  # Increased to allow larger images
         img_max_height = Inches(5.0)
 
-        # Calcular dimensões para manter proporção
-        if aspect_ratio > 1:  # Imagem é mais larga que alta
-            img_width = min(img_max_width, Inches(4.0))
+        # Calculate dimensions preserving aspect ratio
+        if aspect_ratio > 1:  # Image is wider than tall
+            img_width = min(img_max_width, Inches(5.0))
             img_height = img_width / aspect_ratio
             if img_height > img_max_height:
                 img_height = img_max_height
                 img_width = img_height * aspect_ratio
-        else:  # Imagem é mais alta que larga
+        else:  # Image is taller than wide
             img_height = min(img_max_height, Inches(5.0))
             img_width = img_height * aspect_ratio
             if img_width > img_max_width:
                 img_width = img_max_width
                 img_height = img_width / aspect_ratio
 
-        # Centralizar a imagem verticalmente
-        if img_height < img_max_height:
-            img_top = img_top + (img_max_height - img_height) / 2
-
-        # Centralizar a imagem horizontalmente na área reservada
+        # Center the image in the designated area
         img_left = img_left + (img_max_width - img_width) / 2
+        img_top = img_top + (img_max_height - img_height) / 2
 
-        # Adicionar a imagem ao slide
-        slide.shapes.add_picture(image_path, img_left, img_top, width=img_width, height=img_height)
+        # Add the image to the slide
+        try:
+            slide.shapes.add_picture(image_path, img_left, img_top, width=img_width, height=img_height)
+            print(f"Image added successfully: {image_path}")
+        except Exception as e:
+            print(f"Error adding image to slide: {e}")
 
         return slide
 
@@ -405,14 +406,19 @@ class PdfToPptxConverter:
         if not isinstance(document_structure, dict):
             document_structure = self._convert_to_structure(document_structure)
 
+        # Initial validation of image_data
+        if image_data and not isinstance(image_data, list):
+            print(f"Warning: invalid image_data, expected format: list, received: {type(image_data)}")
+            image_data = []
+
         title = document_structure.get('title', 'Document')
         subtitle = document_structure.get('subtitle', '')
 
         if document_structure.get('version'):
             if subtitle:
-                subtitle += f" | Version {document_structure['version']}"
+                subtitle += f" | Version: {document_structure['version']}"
             else:
-                subtitle = f"Version {document_structure['version']}"
+                subtitle = f"Version: {document_structure['version']}"
 
         if document_structure.get('date'):
             if subtitle:
@@ -420,70 +426,67 @@ class PdfToPptxConverter:
             else:
                 subtitle = document_structure['date']
 
+        # Create title slide
         self._add_title_slide(title, subtitle)
 
-        sections = document_structure.get('sections', [])
-        if sections:
-            # Slide de visão geral
-            overview_points = [section['title'] for section in sections]
-            if overview_points:
-                self._add_content_slide("Visão Geral", overview_points[:8])
+        # Process sections
+        for section in document_structure.get('sections', []):
+            section_title = section.get('title', '')
+            content = section.get('content', [])
 
-            # Preparar mapeamento de imagens por página/seção
-            section_images = {}
+            # Check if there are images associated with this section
+            section_image = None
+            if image_data and section.get('has_images'):
+                img_info = section.get('image_info', {})
+                relevant_images = img_info.get('relevant_images', [])
 
-            if image_data and isinstance(image_data, list):
+                if relevant_images and len(relevant_images) > 0:
+                    # Get index of the first relevant image
+                    img_idx = relevant_images[0]
+                    if 0 <= img_idx < len(image_data):
+                        img_path = image_data[img_idx].get('path') if isinstance(image_data[img_idx], dict) else \
+                        image_data[img_idx]
+                        if os.path.exists(img_path):
+                            section_image = img_path
+                            print(f"Associating image {img_path} with section '{section_title}'")
+
+            # For sections without explicitly associated images, search for images by page correspondence
+            if not section_image and image_data:
                 for img in image_data:
-                    if isinstance(img, dict) and "page_num" in img and "path" in img:
-                        page_num = img["page_num"]
-                        img_path = img["path"]
+                    if isinstance(img, dict) and 'path' in img:
+                        section_image = img['path']
+                        print(f"Associating default image {section_image} with section '{section_title}'")
+                        break
 
-                        for idx, section in enumerate(sections):
-                            if "page_range" in section and section["page_range"][0] <= page_num <= \
-                                    section["page_range"][1]:
-                                if idx not in section_images:
-                                    section_images[idx] = []
-                                section_images[idx].append(img_path)
-                                break
-
-            # Criar slides para cada seção
-            for idx, section in enumerate(sections):
-                section_title = section['title']
-                section_content = section.get('content', [])
-
-                selected_image_data = self._select_image_for_section(section, image_data)
-                use_image = selected_image_data is not None
-                selected_image = selected_image_data["path"] if selected_image_data else None
-
-                # E também verifique se há estilo de apresentação específico
-                presentation_style = None
-                if "image_info" in section and "presentation_style" in section["image_info"]:
-                    presentation_style = section["image_info"]["presentation_style"]
-
-                # Criar slide com ou sem imagem
-                if use_image and selected_image:
-                    self._add_content_slide_with_image(section_title, section_content, selected_image)
+            # Add slide according to content type
+            if content and isinstance(content, list) and len(content) > 0:
+                # Check if the content is a table
+                if len(content) == 1 and self._detect_tables(content[0]):
+                    table_data = self._process_table_data([content[0]])
+                    self._add_table_slide(section_title, table_data)
                 else:
-                    self._add_content_slide(section_title, section_content)
+                    # Add slide with or without image
+                    if section_image:
+                        self._add_content_slide_with_image(section_title, content, section_image)
+                    else:
+                        self._add_content_slide(section_title, content)
 
-        # Slide final
-        self._add_section_slide("Obrigado")
-
+        # Save the presentation
         self.prs.save(self.output_filename)
-        print(f"Presentation created and saved as {self.output_filename}")
+        return self.output_filename
 
     def _is_image_relevant(self, section_content, image_path):
         """
-        Verifica se a imagem é relevante para o conteúdo da seção.
+        Checks if the image is relevant to the section content.
         """
-        keywords = ["diagrama", "gráfico", "figura", "imagem", "visualização"]
+        keywords = ["diagram", "graphic", "figure", "image", "visualization"]
         content_text = " ".join(section_content).lower()
 
-        # Verificar se o conteúdo menciona palavras-chave relacionadas a imagens
+        # Check if the content mentions keywords related to images
         if any(keyword in content_text for keyword in keywords):
             return True
 
-        # Adicionar outras verificações, como análise de similaridade, se necessário
+        # Add other checks, such as similarity analysis, if necessary
         return False
 
     def _convert_to_structure(self, text_content):
@@ -534,14 +537,14 @@ class PdfToPptxConverter:
 
     def _select_image_for_section(self, section, image_data):
         """
-        Seleciona a imagem mais adequada para uma seção com base na análise.
+        Selects the most suitable image for a section based on analysis.
 
         Args:
-            section (dict): A seção do documento
-            image_data (list): Lista de dados de imagens disponíveis
+            section (dict): The document section
+            image_data (list): List of available image data
 
         Returns:
-            dict ou None: Dados da imagem selecionada ou None se não houver imagem adequada
+            dict or None: Selected image data or None if no suitable image
         """
         if not image_data or not section.get("has_images", False):
             return None
@@ -550,15 +553,15 @@ class PdfToPptxConverter:
         relevant_images = image_info.get("relevant_images", [])
 
         if not relevant_images:
-            # Estratégia alternativa: procurar referências a imagens no texto
+            # Alternative strategy: look for image references in text
             content_text = " ".join(section.get("content", [])).lower()
-            if any(keyword in content_text for keyword in ["figura", "imagem", "gráfico", "diagrama", "ilustração"]):
-                # Se houver referência a imagens no texto, selecionar a primeira imagem disponível
+            if any(keyword in content_text for keyword in ["figure", "image", "graphic", "diagram", "illustration"]):
+                # If there are image references in the text, select the first available image
                 if image_data:
                     return image_data[0]
             return None
 
-        # Selecionar a primeira imagem relevante que existe em image_data
+        # Select the first relevant image that exists in image_data
         for img_index in relevant_images:
             if 0 <= img_index < len(image_data):
                 return image_data[img_index]

@@ -24,12 +24,12 @@ def allowed_file(filename):
 
 def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, model_name="llama3", theme="default"):
     """
-    Converte um PDF em uma apresentação PowerPoint usando processamento de texto e imagens.
+    Converts a PDF into a PowerPoint presentation using text and image processing.
     """
     print(f"Starting processing with model: {model_name}")
     ollama_processor = OllamaProcessor(model_name=model_name)
 
-    # Configuração do arquivo de saída
+    # Output file configuration
     if not output_file:
         if pdf_path:
             base_name = os.path.splitext(os.path.basename(pdf_path))[0]
@@ -41,7 +41,7 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
     document_name = "Document"
     image_data = []
 
-    # Extração de texto e imagens do PDF
+    # Text and image extraction from PDF
     if not text and pdf_path:
         print(f"Extracting text from PDF: {pdf_path}")
         try:
@@ -49,7 +49,7 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
             text = extractor.extract_text(pdf_path)
             document_name = os.path.splitext(os.path.basename(pdf_path))[0]
 
-            # Extrair imagens do PDF
+            # Extract images from PDF
             print("Extracting images from PDF...")
             from image_extractor import ImageExtractor
             image_data = ImageExtractor.extract_images_from_pdf(pdf_path)
@@ -63,17 +63,17 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
         raise ValueError("Insufficient text for processing")
 
     try:
-        # Limpeza e estruturação do texto
+        # Text cleaning and structuring
         print("Cleaning up and structuring the text...")
         cleaned_text = ollama_processor.clean_and_structure_text(text)
 
-        # Análise estrutural do documento
+        # Document structural analysis
         print("Analyzing the structure of the document...")
         document_structure = ollama_processor.analyze_document_with_images(cleaned_text, image_data)
-        # Validação e processamento da estrutura
+        # Structure validation and processing
         document_structure = normalize_document_structure(document_structure, document_name, text)
 
-        # Geração da apresentação
+        # Presentation generation
         print(f"Generating presentation with theme '{theme}'...")
         converter = PdfToPptxConverter(output_file, ollama_processor, theme=theme)
         converter.create_presentation(document_structure, image_data)
@@ -83,7 +83,7 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
 
     except Exception as e:
         print(f"Error during processing: {str(e)}")
-        # Tentativa de recuperação de erro
+        # Error recovery attempt
         try:
             print("Trying alternative generation method...")
             fallback_structure = create_fallback_structure(text, document_name)
@@ -98,7 +98,7 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
             raise ValueError(f"The presentation could not be generated: {str(e)}")
 
     finally:
-        # Limpar arquivos temporários de imagens
+        # Clean up temporary image files
         for img in image_data:
             try:
                 img_path = img['path'] if isinstance(img, dict) else img
@@ -107,7 +107,7 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
             except Exception as e:
                 print(f"Error cleaning temporary file: {e}")
 
-        # Remover diretório temporário se estiver vazio
+        # Remove temporary directory if empty
         if image_data:
             try:
                 img_path = image_data[0]['path'] if isinstance(image_data[0], dict) else image_data[0]
@@ -143,7 +143,7 @@ def normalize_document_structure(structure, document_name, original_text):
         if paragraphs:
             normalized["sections"] = [{
                 "title": "Main Content",
-                "content": paragraphs[:10],  # Primeiros 10 parágrafos
+                "content": paragraphs[:10],  # First 10 paragraphs
                 "importance": "high",
                 "type": "overview"
             }]
@@ -245,11 +245,11 @@ def create_fallback_structure(text, document_name):
 
 
 def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="llama3", theme="default"):
-    # Garantir que a pasta uploads exista
+    # Ensure uploads folder exists
     uploads_folder = app.config['UPLOAD_FOLDER']
     os.makedirs(uploads_folder, exist_ok=True)
 
-    # Criar nomes de arquivos únicos baseados em timestamp
+    # Create unique filenames based on timestamp
     import time
     timestamp = int(time.time())
     temp_pdf_path = os.path.join(uploads_folder, f"temp_pdf_{timestamp}.pdf")
@@ -258,7 +258,7 @@ def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="ll
         f.write(pdf_bytes)
 
     try:
-        # Usar o caminho completo para o arquivo temporário
+        # Use complete path for temporary file
         result = pdf_to_pptx_with_ollama(
             pdf_path=temp_pdf_path,
             output_file=output_file,
@@ -267,16 +267,16 @@ def pdf_bytes_to_pptx(pdf_bytes, output_file="presentation.pptx", model_name="ll
         )
         return result
     except Exception as e:
-        print(f"Erro ao processar PDF: {str(e)}")
+        print(f"Error processing PDF: {str(e)}")
         raise e
     finally:
-        # Limpeza do arquivo temporário
+        # Temporary file cleanup
         if os.path.exists(temp_pdf_path):
             try:
                 os.remove(temp_pdf_path)
-                print(f"Arquivo temporário removido: {temp_pdf_path}")
+                print(f"Temporary file removed: {temp_pdf_path}")
             except Exception as e:
-                print(f"Erro ao remover arquivo temporário: {str(e)}")
+                print(f"Error removing temporary file: {str(e)}")
 
 
 @app.route('/')
@@ -350,7 +350,7 @@ def convert_pdf():
 @app.route('/models')
 def get_models():
     models = [
-        {"id": "llama3.2:1b", "name": "Llama 3.2 (1B)"},
+        {"id": "llama3:8b", "name": "Llama 3 (8B)"},
         {"id": "deepseek-r1:14b", "name": "DeepSeek R1 (14B)"},
         {"id": "gemma3:12b", "name": "Gemma3 (12B)"},
     ]
