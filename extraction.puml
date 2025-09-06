@@ -1,0 +1,40 @@
+@startuml PDF Extraction
+
+participant "App" as App
+participant "PdfExtractor" as PdfExtractor
+participant "ImageExtractor" as ImageExtractor
+participant "PyPDF2" as PyPDF2
+participant "PDFMiner" as PDFMiner
+participant "PyMuPDF (fitz)" as Fitz
+participant "File System" as FS
+
+App -> FS : Saves temporary file
+App -> PdfExtractor : extract_text(pdf_path)
+
+PdfExtractor -> PyPDF2 : extract_with_pypdf2(pdf_path)
+PyPDF2 -> PyPDF2 : Extracts text from PDF
+PyPDF2 --> PdfExtractor : Returns extracted text
+
+PdfExtractor -> PDFMiner : extract_with_pdfminer(pdf_path)
+PDFMiner -> PDFMiner : Extracts text from PDF
+PDFMiner --> PdfExtractor : Returns extracted text
+
+PdfExtractor -> PdfExtractor : Compares results and chooses the best
+PdfExtractor --> App : Returns PDF text
+
+App -> ImageExtractor : extract_images_from_pdf(pdf_path)
+ImageExtractor -> Fitz : open(pdf_path)
+Fitz -> Fitz : Opens PDF document
+ImageExtractor -> Fitz : Gets images
+Fitz --> ImageExtractor : List of found images
+
+loop For each image found
+  ImageExtractor -> Fitz : extract_image(xref)
+  Fitz --> ImageExtractor : Binary image data
+  ImageExtractor -> FS : Saves image to temporary file
+  ImageExtractor -> ImageExtractor : Filters images by minimum size
+end
+
+ImageExtractor --> App : Returns extracted image metadata
+
+@enduml

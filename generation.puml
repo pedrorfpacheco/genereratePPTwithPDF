@@ -1,0 +1,28 @@
+@startuml PDF Processing
+
+participant "Interface" as Interface
+participant "App" as App
+participant "PdfToPptxConverter" as Converter
+participant "File System" as FS
+
+App -> Converter : create_presentation(document_structure, image_data)
+
+Converter -> Converter : _add_title_slide(title, subtitle)
+Converter -> Converter : Creates slides based on document sections
+
+loop For each section
+  Converter -> Converter : Decides slide type (content, table, image)
+  alt Section with image
+    Converter -> Converter : _add_content_slide_with_image(title, content, image)
+  else Section without image
+    Converter -> Converter : _add_content_slide(title, content)
+  end
+end
+
+Converter -> FS : Saves PPTX presentation
+Converter --> App : Path to PPTX file
+
+App --> Interface : Send finalized presentation
+App -> FS : Remove temporary files
+
+@enduml

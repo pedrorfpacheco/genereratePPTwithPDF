@@ -27,6 +27,8 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
     Converts a PDF into a PowerPoint presentation using text and image processing.
     """
     print(f"Starting processing with model: {model_name}")
+    current_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+    print(current_time)
     ollama_processor = OllamaProcessor(model_name=model_name)
 
     # Output file configuration
@@ -92,6 +94,8 @@ def pdf_to_pptx_with_ollama(pdf_path=None, pdf_text=None, output_file=None, mode
             converter.create_presentation(fallback_structure, image_data)
 
             print(f"Presentation generated via alternative method: {output_file}")
+            current_time2 = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+            print(current_time2)
             return output_file
         except Exception as fallback_error:
             print(f"Total processing failure: {str(fallback_error)}")
@@ -350,6 +354,7 @@ def convert_pdf():
 @app.route('/models')
 def get_models():
     models = [
+        {"id": "llama3.2:1b", "name": "Llama 3.2 (1B)"},
         {"id": "llama3:8b", "name": "Llama 3 (8B)"},
         {"id": "deepseek-r1:14b", "name": "DeepSeek R1 (14B)"},
         {"id": "gemma3:12b", "name": "Gemma3 (12B)"},

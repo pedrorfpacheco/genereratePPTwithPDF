@@ -1,0 +1,27 @@
+@startuml PDF Processing
+
+participant "App" as App
+participant "OllamaProcessor" as OllamaProcessor
+participant "Ollama API" as Ollama
+
+App -> OllamaProcessor : clean_and_structure_text(text)
+OllamaProcessor -> Ollama : chat(model, prompt)
+Ollama -> Ollama : Processes text with LLM
+Ollama --> OllamaProcessor : Returns cleaned and structured text
+OllamaProcessor --> App : Processed text
+
+App -> OllamaProcessor : analyze_document_with_images(text, image_data)
+OllamaProcessor -> OllamaProcessor : analyze_document_structure(text)
+OllamaProcessor -> Ollama : chat(model, prompt)
+Ollama -> Ollama : Analyzes document structure
+Ollama --> OllamaProcessor : Returns structure in JSON
+
+OllamaProcessor -> Ollama : chat(model, prompt for image analysis)
+Ollama -> Ollama : Analyzes text-image relationship
+Ollama --> OllamaProcessor : Returns image analysis
+OllamaProcessor -> OllamaProcessor : Combines document structure with image information
+OllamaProcessor --> App : Complete document structure
+
+App -> App : normalize_document_structure(structure)
+
+@enduml

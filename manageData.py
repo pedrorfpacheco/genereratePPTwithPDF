@@ -159,7 +159,7 @@ class OllamaProcessor:
         Returns:
             dict: Document structure with images associated to sections
         """
-        # First, we get the basic document structure
+        # Get the basic document structure
         doc_structure = self.analyze_document_structure(text)
 
         if not image_data or not isinstance(image_data, list) or len(image_data) == 0:

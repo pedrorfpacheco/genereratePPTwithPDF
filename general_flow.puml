@@ -1,0 +1,35 @@
+@startuml "PDF to PowerPoint Conversion Flow"
+
+actor "User" as User
+participant "Web Interface" as WebUI
+participant "App" as Main
+participant "PdfExtractor" as PdfExtractor
+participant "ImageExtractor" as ImageExtractor
+participant "OllamaProcessor" as OllamaProcessor
+participant "Ollama API" as Ollama
+participant "PptxConverter" as PptxConverter
+
+autonumber
+User -> WebUI: Upload PDF file
+User -> WebUI: Choose PPTX theme
+User -> WebUI: Choose LLM model
+User -> WebUI: Submit for processing
+WebUI -> Main: Send PDF file, theme, and model
+Main -> PdfExtractor: Extract text from PDF
+Main -> ImageExtractor: Extract images from PDF
+PdfExtractor --> Main: Return extracted text
+ImageExtractor --> Main: Return extracted images
+
+Main -> OllamaProcessor: Send extracted content
+OllamaProcessor -> Ollama: Request summarization and structuring
+Ollama --> OllamaProcessor: Return processed content
+OllamaProcessor --> Main: Return structured content
+
+Main -> PptxConverter: Request slides generation
+PptxConverter -> PptxConverter: Compose and style slides
+PptxConverter --> Main: Return PPTX file
+
+Main --> WebUI: Send finalized presentation
+WebUI --> User: Provide PPTX download
+
+@enduml

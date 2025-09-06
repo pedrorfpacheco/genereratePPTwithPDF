@@ -1,0 +1,73 @@
+@startuml "PDF to PowerPoint Converter"
+
+' Forçar direção de cima para baixo
+top to bottom direction
+
+skinparam {
+  componentStyle rectangle
+  backgroundColor white
+  arrowColor black
+  packageBackgroundColor LightGray
+  packageBorderColor Gray
+  componentBackgroundColor white
+  nodesep 80
+  ranksep 100
+}
+
+' CAMADA 1: Web Application
+package "Web Application" #E0F0FF {
+  [App] as Main
+  [Interface] as Templates
+}
+
+' CAMADA 2: Processamento de negócios
+' Organização lado a lado
+together {
+  package "Extraction" #F0E0FF {
+    [PdfExtractor] as PdfExtractor
+    [ImageExtractor] as ImageExtractor
+  }
+  package "Processing" #FFF0E0 {
+    [OllamaProcessor] as OllamaProcessor
+  }
+  package "Generation" #E0FFE0 {
+    [PptxConverter] as PptxConverter
+  }
+}
+
+' CAMADA 3: External Libraries
+package "External Libraries" #FFFFD0 {
+  [PyPDF2] as PyPDF2
+  [PDFMiner] as PDFMiner
+  [PyMuPDF] as PyMuPDF
+  [PIL] as PIL
+  [Ollama API] as Ollama
+  [python-pptx] as PPTX
+}
+
+' Forçar posicionamento em camadas
+Main -[hidden]d- Generation
+
+' Relações básicas (todas apontando para baixo)
+Main -r-> Templates : renders
+Main -l-> PdfExtractor : uses
+Main -l-> ImageExtractor : uses
+Main -d-> OllamaProcessor : uses
+Main -r-> PptxConverter : uses
+
+' Dependências de componentes
+PdfExtractor -d-> PyPDF2
+PdfExtractor -d-> PDFMiner
+ImageExtractor -d-> PyMuPDF
+ImageExtractor -d-> PIL
+OllamaProcessor -d-> Ollama
+PptxConverter -d-> PPTX
+PptxConverter -l-> OllamaProcessor : uses output
+
+' Fluxo de dados principal
+Main -[#blue,thickness=2]d-> PdfExtractor : 1. Extract text
+Main -[#blue,thickness=2]d-> ImageExtractor : 2. Extract images
+Main -[#blue,thickness=2]d-> OllamaProcessor : 3. Structure content
+Main -[#blue,thickness=2]l-> PptxConverter : 4. Generate presentation
+
+@enduml
